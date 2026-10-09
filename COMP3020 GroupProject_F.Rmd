@@ -149,6 +149,197 @@ Clearly state the hypotheses and select an appropriate statistical test from tho
 Explain why the test is suitable and interpret the result in the context of your research question.
 Hint: Consider whether characteristics of posts, users, films or other entities in your dataset can be compared or associated in a way that addresses an interesting question.
 
+Data Cleaning | Neville
+
+```{r load-packages}
+library(tidyverse)
+library(tidytext)
+library(wordcloud)
+library(RColorBrewer)
+```
+Checking the data before cleaning
+````{r check-before-cleaning}
+nrow(worldcup) #posts before cleaning
+sum(is.na(worldcup$text)) #post with missing text
+sum(duplicated(worldcup$uri)) #duplicate posts
+````
+Cleaning
+```{r clean-data}
+wc <- worldcup%>%
+distinct(uri, .keep_all = TRUE) %>% #remove duplicates
+filter(!is.na(text), str_trim(text) != "") #remove missing/empty text
+wc <- wc %>%
+mutate(
+date = as.Date(created_at),
+post_length = nchar(text),
+clean_text = text %>%
+str_to_lower() %>% # lowercase
+str_remove_all("https?://\\S+") %>% # remove links
+str_remove_all("@\\S+") %>% # remove @mentions
+str_replace_all("[^a-z\\s]", " ") %>% # keep letters only
+str_squish(), # remove extra spaces
+word_count = str_count(clean_text, "\\S+"),
+# total engagement = likes + reposts + replies + quotes
+total_engagement = like_count + repost_count + reply_count + quote_count
+) %>%
+filter(clean_text != "") # remove posts empty after cleaning
+nrow(wc) # posts after cleaning
+```
+English posts only (the keyword search and stop words only work in English)
+```{r english-only}
+wc_en <- wc %>%
+filter(sapply(langs, function(x) "en" %in% x))
+nrow(wc_en) # English posts
+```
+Hypothesis Testing | Neville
+
+Develop a research question that can be addressed using hypothesis testing. The research question may involve any suitable variables in the data collected from the social web, but should contribute to the overall investigation.
+Clearly state the hypotheses and select an appropriate statistical test from those covered in COMP3020.
+Explain why the test is suitable and interpret the result in the context of your research question.
+Hint: Consider whether characteristics of posts, users, films or other entities in your dataset can be compared or associated in a way that addresses an interesting question.
+Research question Do posts mentioning a host country (USA, Canada, Mexico)
+differ in engagement from posts that don't?
+```{r create-groups}
+wc_en <- wc_en %>%
+mutate(
+mentions_host = str_detect(
+clean_text,
+"\b(usa|united states|canada|mexico)\b"
+),
+host_group = if_else(mentions_host, "Mentions host country", "No host country"),
+host_group = factor(host_group,
+levels = c("No host country", "Mentions host country"))
+)
+table(wc_en$host_group)
+```
+```{r group-summary}
+wc_en %>%
+group_by(host_group) %>%
+summarise(
+n = n(),
+mean_engagement = mean(total_engagement),
+median_engagement = median(total_engagement),
+max_engagement = max(total_engagement),
+pct_any_engagement = round(mean(total_engagement > 0) * 100, 1)
+)
+```
+```{r engagement-histogram}
+ggplot(wc_en, aes(x = total_engagement)) +
+geom_histogram(bins = 30, fill = "steelblue") +
+facet_wrap(~ host_group, scales = "free_y") +
+labs(title = "Distribution of engagement by host-country mention",
+x = "Total engagement (likes + reposts + replies + quotes)",
+y = "Number of posts")
+```
+```{r engagement-boxplot}
+ggplot(wc_en, aes(x = host_group, y = log1p(total_engagement), fill = host_group)) +
+geom_boxplot(show.legend = FALSE) +
+labs(title = "Engagement by host-country mention (log scale)",
+x = "Post group", y = "log(1 + total engagement)")
+```
+H0: The distribution of engagement is the same for posts that mention a host country and posts that do not.
+H1: The distribution of engagement differs between the two groups.
+Test: Wilcoxon rank-sum (Mann-Whitney U) test. The two groups are independent, and the plots above show engagement is heavily right-skewed with many zeros, so the normality assumption of a t-test is not met.
+```{r wilcoxon-test}
+wilcox.test(total_engagement ~ host_group, data = wc_en, exact = FALSE)
+```
+Interpretation: We used a Wilcoxon rank-sum test to check whether posts mentioning a host country (USA, Canada or Mexico) had different engagement levels. The test returned W = 3792.5 and p = 0.044. Since the p-value is below 0.05, we rejected the null hypothesis and found a statistically significant difference between the two groups.
+Posts mentioning a host country had higher engagement, with a mean of 67.9 and median of 3.5 interactions. In comparison, other posts had a mean of 34.5 and median of 1.0. Also, 85.7% of host-country posts received engagement, compared to 62.8% of other posts.
+However, only 14 posts mentioned a host country, compared to 779 others. A few popular posts may have influenced the results, and the p-value was close to 0.05. We also may have missed posts referring to countries indirectly. Therefore, these findings only apply to our sample of English-language Bluesky posts and do not prove that mentioning a host country causes higher engagement.
+Text/Content Analysis and Visualisation | Neville
+
+Clean the data and address missing or unsuitable records. Explore the textual/content characteristics of your data and represent the text in an appropriate form for further analysis. Provide relevant summaries and at least two informative visualisations, including a visualisation of frequent words.
+Interpret the patterns you identify and explain how they contribute to your investigation.
+
+Text summaries
+
+```{r text-summaries}
+summary(wc_en$post_length)
+summary(wc_en$word_count)
+```
+### histogram of the number of words in each post
+```{r words-per-post}
+ggplot(wc_en, aes(x = word_count)) +
+geom_histogram(binwidth = 5, fill = "orange", colour = "black") +
+labs(title = "Number of Words per Post",
+x = "Number of words",
+y = "Number of posts")
+```
+Interpretation
+The 793 English posts varied in length, ranging from 12 to 319 characters. The median word count was 25, with an average of 26.5 words per post. Since the mean and median are close, the word counts were fairly balanced overall.
+The histogram showed that many posts contained 5 words or fewer, while most others were between 10 and 50 words. Posts longer than 50 words were less common. The shorter posts may mainly contain links, hashtags or mentions rather than longer text.
+Word frequencies
+
+```{r tokenise}
+#words to remove: our search terms and some filler words
+
+custom_stop <- tibble(word = c("fifa", "world", "cup", "worldcup",
+"fifaworldcup", "amp", "just", "will",
+"like", "get", "got", "www", "footba"))
+#split each post into single words and remove stop words
+
+tokens <- wc_en %>%
+select(uri, clean_text) %>%
+unnest_tokens(word, clean_text) %>%
+anti_join(stop_words, by = "word") %>%
+anti_join(custom_stop, by = "word") %>%
+filter(nchar(word) > 2)
+#count how many times each word appears
+
+word_freq <- tokens %>%
+count(word, sort = TRUE)
+head(word_freq, 20) # top 20 words
+nrow(word_freq) # number of different words
+```
+
+Interpretation
+The most common words in the English posts were "uefa" (342 times), "infantino" (205), "boycott" (195) and "football" (149). Other frequent words included "trump", "private", "investors" and "kushner". This suggests that many posts focused on a specific news story involving UEFA, FIFA president Gianni Infantino, private investors and a possible boycott, rather than general World Cup discussion.
+This means the dataset may not represent World Cup discussions overall, as many posts appear to focus on the same topic. This could also affect the clustering results, as posts may be grouped based on this news story. Words such as "footba" and "www" were removed because they came from cut-off text or web addresses.
+Visualisations
+
+```{r top-words-bar}
+#bar chart of the 15 most common words
+
+word_freq %>%
+slice_max(n, n = 15) %>%
+ggplot(aes(x = reorder(word, n), y = n)) +
+geom_col(fill = "steelblue") +
+coord_flip() +
+labs(title = "Most Frequent Words in World Cup Posts",
+x = "Word",
+y = "Number of times used")
+```
+```{r wordcloud}
+#word cloud of the most common words
+
+set.seed(123)
+wordcloud(words = word_freq$word, freq = word_freq$n,
+max.words = 80, min.freq = 3,
+random.order = FALSE,
+colors = brewer.pal(8, "Dark2"))
+```
+```{r host-country-bar}
+#how many posts mention each host country
+
+host_counts <- tibble(
+country = c("USA", "Canada", "Mexico"),
+posts = c(
+sum(str_detect(wc_en$clean_text, "\b(usa|united states)\b")),
+sum(str_detect(wc_en$clean_text, "\bcanada\b")),
+sum(str_detect(wc_en$clean_text, "\bmexico\b"))
+)
+)
+ggplot(host_counts, aes(x = reorder(country, posts), y = posts)) +
+geom_col(fill = "darkred") +
+labs(title = "Posts Mentioning Each Host Country",
+x = "Host country",
+y = "Number of posts")
+```
+Interpretation
+The bar chart and word cloud show that the most common words were "uefa", "infantino", "boycott" and "football". This suggests that most posts focused on a news story involving UEFA, FIFA president Gianni Infantino and a possible boycott, rather than matches or players.
+The date table shows that almost all posts were from 30 July 2026. This means the data only represents discussion from one day, possibly because the search returned the latest posts first and stopped at around 1,000 posts.
+The USA was mentioned in 10 posts, Canada in 4 and Mexico in 1. These total more than 14 because some posts mentioned multiple countries. Overall, the data focuses heavily on one news story, which limits the hypothesis test and may affect the clustering results.
+
 $H_0$: Skeets from news sites and normal users have the same amount of average likes.
 $H_A$: Skeets from news sites and normal users have a different amount of average likes. 
 
@@ -210,14 +401,17 @@ worldcup.corpus = tm_map(
 #    gsub("https?://\\S+|www\\.\\S+", " ", x, perl = TRUE)
 #    })
 #remove_urls <- function(x) gsub(c("http[^[:space:]]*", "www[^[:space:]]*"), "", x) 
-worldcup.corpus = tm_map(worldcup.corpus, remove_urls)
+
 remove_urls = content_transformer(function(x) {
   gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
 })
+worldcup.corpus = tm_map(worldcup.corpus, remove_urls)
 custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
                "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
                "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
-               "wwwbbccouksportfootba", "fecking")
+               "wwwbbccouksportfootba", "fecking", "youtubecompostugkxt","newsskycomstoryworld",
+               "bbcinfwjcxo", "sportsyahoocomarticlesuef", "youtubecomshortsbliaq","apnewscomarticlefifa",
+               "nypostcomb")
 
 worldcup.corpus=tm_map(worldcup.corpus, removeNumbers)
 worldcup.corpus=tm_map(worldcup.corpus, removePunctuation)
@@ -254,7 +448,7 @@ for(i in 1:15){
 plot(1:15, worldcup_SSW, type = "b", xlab = "Number of Clusters")
 ```
 
-In this plot we can see an "elbow" at 8 clusters. 
+In this plot we can see a few "elbow", but we will choose 12 clusters as the SSW decreases more evenly past that point. 
 
 ```{r, warning = FALSE}
 # K-Means clustering with cosine distance
@@ -269,7 +463,7 @@ N = dim(worldcup.matrix)[1]
 N
 dim(as.matrix(D))
 
-mds.worldcup.matrix=cmdscale(D, k=80)
+mds.worldcup.matrix=cmdscale(D, k=581)
 
 SSW.mds = rep(0,15)
 for(i in 1:15){
@@ -277,46 +471,31 @@ for(i in 1:15){
   SSW.mds[i] = K$tot.withinss
 }
 plot(1:15, SSW.mds, type = "b")
-# elbows at 7
+```
 
-K=kmeans(mds.worldcup.matrix, 7, nstart=20)
+From this plot we choose 6 as the number of clusters. 
+
+```{r}
+K=kmeans(mds.worldcup.matrix, 6, nstart=20)
 mds2.worldcup.matrix=cmdscale(D,k=2)
 plot(mds2.worldcup.matrix, col = K$cluster)
 
 
 # Examining the cluster contents
-K = kmeans(mds.worldcup.matrix, 7, nstart=20)
 table(K$cluster)
 
-# # Find top terms for the first cluster
-# cluster.number = 1
-# #find posts assigned to this cluster
-# clusterpostsId=which(K$cluster == cluster.number)
-# #extract their original weighted document vectors
-# clusterposts = worldcup.matrix[clusterpostsId,]
-# #calculate the mean TF-IDF weight of each term
-# clusterTermWeight=colMeans(clusterposts)
-# #display the top 10 weighted terms
-# sort(clusterTermWeight, decreasing = TRUE)[1:10]
-# #make wordcloud
-# wordcloud(
-#   words = names(clusterTermWeight),
-#   freq = clusterTermWeight,
-#   min.freq = 3,
-#   max.words = 100,
-#   random.order = FALSE,
-#   rot.per = 0.35,
-#   colors = brewer.pal(8, "Dark2"),
-#   scale = c(2, .5)
-# )
-
-par(mfrow = c(1,1))
-for(i in 1:7){
-  cluster.number = i
+explore_clusters <- function(x){
+  # Find top terms for the first cluster
+  cluster.number = x
+  #find posts assigned to this cluster
   clusterpostsId=which(K$cluster == cluster.number)
+  #extract their original weighted document vectors
   clusterposts = worldcup.matrix[clusterpostsId,]
+  #calculate the mean TF-IDF weight of each term
   clusterTermWeight=colMeans(clusterposts)
+  #display the top 10 weighted terms
   sort(clusterTermWeight, decreasing = TRUE)[1:10]
+  #make wordcloud
   wordcloud(
     words = names(clusterTermWeight),
     freq = clusterTermWeight,
@@ -325,11 +504,18 @@ for(i in 1:7){
     random.order = FALSE,
     rot.per = 0.35,
     colors = brewer.pal(8, "Dark2"),
-    scale = c(2, .5),
+    scale = c(2, .5)
   )
 }
+explore_clusters(1)
+
 ```
 
+From this wordcloud we can see themes of the politics surrounding the World Cup, particularly for Europe and the UEFA (Union of European Football Associations). People are calling for some sort of boycott, and there seem to be discussions about sales and investments in relation to that. 
+
+```{r, fig.align='center'}
+explore_clusters(2)
+```
 
 ```{r, message = FALSE, warning = FALSE}
 news_texts = news_skeets$text
@@ -445,47 +631,10 @@ wordcloud(
 ### Hierarchical Clustering
 
 ```{r}
-# First we set up and clean the normal skeets data
+# First we set up our normal_texts 
 normal_texts = normal_skeets$text
-normal.corpus=Corpus(VectorSource(normal_texts))
-normal.corpus = tm_map(
-  normal.corpus,
-  function(x) iconv(x, to = "ASCII")
-)
 
-remove_urls = content_transformer(function(x) {
-  gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
-})
-normal.corpus = tm_map(normal.corpus, remove_urls)
-
-custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
-               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
-               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
-               "wwwbbccouksportfootba", "fecking")
-
-normal.corpus=tm_map(normal.corpus, removeNumbers)
-normal.corpus=tm_map(normal.corpus, removePunctuation)
-normal.corpus=tm_map(normal.corpus, stripWhitespace)
-normal.corpus=tm_map(normal.corpus, tolower)
-normal.corpus=tm_map(normal.corpus, removeWords,
-                    c(stopwords("english"), custom_words, tolower(custom_words)))
-normal.corpus=tm_map(normal.corpus, stemDocument)
-# I tried repeating this command after stemming as some of my custom stop words kept sneaking through
-normal.corpus=tm_map(normal.corpus, removeWords,
-                    c(stopwords("english"), custom_words, tolower(custom_words)))
-
-# Extract document vectors and apply TF-IDF weighting
-## Create a term-document matrix
-normal.tdm=TermDocumentMatrix(normal.corpus)
-# Apply TF-IDF weighting.
-normal.wtdm = weightTfIdf(normal.tdm)
-# Transpose so documents are rows and terms are columns.
-normal.matrix = t(as.matrix(normal.wtdm))
-# Remove empty texts
-empties = which(rowSums(abs(normal.matrix)) == 0)
-normal.matrix = normal.matrix[-empties, ]
-
-
+# Now we create an index with 199 "News" entries and 185 "Normal" entries
 index = c(rep("News", length(news_texts)),
           rep("Normal", length(normal_texts)))
 
@@ -671,7 +820,7 @@ plot(degree_distribution(g, mode = "in"), type="h",
 print(degree_distribution(g, mode = "in"))
 ```
 
-This distribution shows us that approximately 87% of the nodes in the full work have an in-degree of 2.
+This distribution shows us that approximately 87% of the nodes in the full work have an in-degree of 2. Even though the edge density of the full graph is low, we could see from the subgraph that users in the second level of likes had also likes each others' posts. 
 
 ```{r}  
 #highest degree scores are most central
