@@ -137,7 +137,7 @@ As the project is being completed on multiple devices, it is important to make s
 ```{r}
 #save(worldcup, compress = FALSE, file = "/Users/annelisetough/Desktop/WSU/COMP3020/WorldCupSkeets.RData")
 # This has been commented out as the data has already been saved
-load("/Users/annelisetough/Desktop/WSU/COMP3020/WorldCupSkeets.RData")
+load("WorldCupSkeets.RData")
 ```
 
 \newpage
@@ -241,7 +241,9 @@ H0: The distribution of engagement is the same for posts that mention a host cou
 H1: The distribution of engagement differs between the two groups.
 Test: Wilcoxon rank-sum (Mann-Whitney U) test. The two groups are independent, and the plots above show engagement is heavily right-skewed with many zeros, so the normality assumption of a t-test is not met.
 ```{r wilcoxon-test}
+table(wc_en$host_group, useNA = "ifany")
 wilcox.test(total_engagement ~ host_group, data = wc_en, exact = FALSE)
+wilcox.test(wc_en$total_engagement, wc_en$host_group, paired = TRUE)
 ```
 Interpretation: We used a Wilcoxon rank-sum test to check whether posts mentioning a host country (USA, Canada or Mexico) had different engagement levels. The test returned W = 3792.5 and p = 0.044. Since the p-value is below 0.05, we rejected the null hypothesis and found a statistically significant difference between the two groups.
 Posts mentioning a host country had higher engagement, with a mean of 67.9 and median of 3.5 interactions. In comparison, other posts had a mean of 34.5 and median of 1.0. Also, 85.7% of host-country posts received engagement, compared to 62.8% of other posts.
@@ -340,38 +342,6 @@ The bar chart and word cloud show that the most common words were "uefa", "infan
 The date table shows that almost all posts were from 30 July 2026. This means the data only represents discussion from one day, possibly because the search returned the latest posts first and stopped at around 1,000 posts.
 The USA was mentioned in 10 posts, Canada in 4 and Mexico in 1. These total more than 14 because some posts mentioned multiple countries. Overall, the data focuses heavily on one news story, which limits the hypothesis test and may affect the clustering results.
 
-$H_0$: Skeets from news sites and normal users have the same amount of average likes.
-$H_A$: Skeets from news sites and normal users have a different amount of average likes. 
-
-### Separate the data into news and normal users
-```{r}
-# First we get the locations of the skeets from news sites using the `grep` command
-# Some normal users may end up in the list, but this is difficult to avoid
-# This may also not catch all news sites if these key words are not in their Bluesky handles
-news_skeet_locations = c(grep("news", worldcup$author_handle),
-                         grep("org", worldcup$author_handle),
-                         grep("net", worldcup$author_handle),
-                         grep("com", worldcup$author_handle),
-                         grep("hub", worldcup$author_handle),
-                         grep("times", worldcup$author_handle))
-print(news_skeet_locations)
-length(news_skeet_locations)
-```
-
-There are approximately 199 skeets out of 1030 from news sites (approximate as some news sites may have been missed and some normal users may have been included in this search). 
-
-Now we can split our `worldcup` data into two, one for news skeets and one for normal skeets, and find the average like counts. 
-
-```{r}
-news_skeets = worldcup[news_skeet_locations,]
-normal_skeets = worldcup[-news_skeet_locations,]
-
-avg_news_likes = sum(news_skeets$like_count)/length(news_skeets)
-avg_normal_likes = sum(normal_skeets$like_count)/length(normal_skeets)
-cat("News:", avg_news_likes, "Normal:", avg_normal_likes, "\n")
-```
-
-
 ## Text/Content Analysis and Visualisation | Neville 
 
 Clean the data and address missing or unsuitable records. Explore the textual/content characteristics of your data and represent the text in an appropriate form for further analysis. Provide relevant summaries and at least two informative visualisations, including a visualisation of frequent words.
@@ -385,16 +355,41 @@ Investigate whether meaningful clusters can be identified in the textual/content
 Make appropriate decisions about the representation of the data, distance measure and number of clusters, and justify these decisions. Visualise your clusters and summarise the themes or characteristics of each cluster.
 Your clustering analysis should go beyond simply running an R function and reporting the cluster labels.
 
-### K-Means Clustering
-- Lab 6
-- uses Euclidean distance
+### Separate the data into news and normal users
+
+As the previous results already highlight keywords from `wc_en` skeets, I thought we could investigate if the apparent themes will change based on if the user is a news site or a normal user. As the prior key words seemed to follow a news story, I will focus on normal users skeets only to see if they differ from the overall themes. 
+
+```{r}
+# First we get the locations of the skeets from news sites using the `grep` command
+# Some normal users may end up in the list, but this is difficult to avoid
+# This may also not catch all news sites if these key words are not in their Bluesky handles
+news_skeet_locations = c(grep("news", wc_en$author_handle),
+                         grep("org", wc_en$author_handle),
+                         grep("net", wc_en$author_handle),
+                         grep("com", wc_en$author_handle),
+                         grep("hub", wc_en$author_handle),
+                         grep("times", wc_en$author_handle))
+print(news_skeet_locations)
+length(news_skeet_locations)
+```
+
+There are approximately 84 skeets out of 793 from news sites (approximate as some news sites may have been missed and some normal users may have been included in this search), so the remaining skeets should be from normal users. 
+
+Now we can split our `wc_en` data into two, one for news skeets and one for normal skeets. 
+
+```{r}
+news_skeets = wc_en[news_skeet_locations,]
+normal_skeets = wc_en[-news_skeet_locations,]
+```
+
+Now that we've separated the normal skeets from the news skeets, we can create a corpus and clean the data for clustering. 
 
 ```{r, message = FALSE, warning = FALSE}
-worldcup_texts = worldcup$text
+normal_texts = normal_skeets$text
 
-worldcup.corpus=Corpus(VectorSource(worldcup_texts))
-worldcup.corpus = tm_map(
-  worldcup.corpus,
+normal.corpus=Corpus(VectorSource(normal_texts))
+normal.corpus = tm_map(
+  normal.corpus,
   function(x) iconv(x, to = "ASCII")
 )
 # remove_urls = content_transformer(function(x) {
@@ -405,82 +400,89 @@ worldcup.corpus = tm_map(
 remove_urls = content_transformer(function(x) {
   gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
 })
-worldcup.corpus = tm_map(worldcup.corpus, remove_urls)
+normal.corpus = tm_map(normal.corpus, remove_urls)
 custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
                "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
                "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
                "wwwbbccouksportfootba", "fecking", "youtubecompostugkxt","newsskycomstoryworld",
                "bbcinfwjcxo", "sportsyahoocomarticlesuef", "youtubecomshortsbliaq","apnewscomarticlefifa",
-               "nypostcomb")
+               "nypostcomb", "fuckall", "fuckfifa")
 
-worldcup.corpus=tm_map(worldcup.corpus, removeNumbers)
-worldcup.corpus=tm_map(worldcup.corpus, removePunctuation)
-worldcup.corpus=tm_map(worldcup.corpus, stripWhitespace)
-worldcup.corpus=tm_map(worldcup.corpus, tolower)
-worldcup.corpus=tm_map(worldcup.corpus, removeWords,
+normal.corpus=tm_map(normal.corpus, removeNumbers)
+normal.corpus=tm_map(normal.corpus, removePunctuation)
+normal.corpus=tm_map(normal.corpus, stripWhitespace)
+normal.corpus=tm_map(normal.corpus, tolower)
+normal.corpus=tm_map(normal.corpus, removeWords,
                     c(stopwords("english"), custom_words, tolower(custom_words)))
-worldcup.corpus=tm_map(worldcup.corpus, stemDocument)
-worldcup.corpus=tm_map(worldcup.corpus, removeWords,
+normal.corpus=tm_map(normal.corpus, stemDocument)
+normal.corpus=tm_map(normal.corpus, removeWords,
                     c(stopwords("english"), custom_words, tolower(custom_words)))
 
 # Extract document vectors and apply TF-IDF weighting
 ## Create a term-document matrix
-worldcup.tdm=TermDocumentMatrix(worldcup.corpus)
+normal.tdm=TermDocumentMatrix(normal.corpus)
 # Apply TF-IDF weighting.
-worldcup.wtdm = weightTfIdf(worldcup.tdm)
+normal.wtdm = weightTfIdf(normal.tdm)
 # Transpose so documents are rows and terms are columns.
-worldcup.matrix = t(as.matrix(worldcup.wtdm))
+normal.matrix = t(as.matrix(normal.wtdm))
 # Remove empty texts
-empties = which(rowSums(abs(worldcup.matrix)) == 0)
-worldcup.matrix = worldcup.matrix[-empties, ]
+empties = which(rowSums(abs(normal.matrix)) == 0)
+normal.matrix = normal.matrix[-empties, ]
 ```
 
-When using K-means clustering, we need to decide the appropriate amount of clusters. We can observe the within sum of squares (SSW) and choose the number of clusters based on which K value has the lowest SSW. 
+### K-Means Clustering
+
+When using K-means clustering, we need to decide the appropriate amount of clusters. We can observe the within sum of squares (SSW) and choose the number of clusters based on which K value has the lowest SSW, or where we see an "elbow" in the plot of the SSWs. 
 
 We start by observing the SSWs for clusters of size 1 to 15. 
 
 ```{r}
-worldcup_SSW <- list()
+normal_SSW <- list()
 for(i in 1:15){
-  K = kmeans(worldcup.matrix, i)
-  worldcup_SSW[i] <- K$tot.withinss
+  K = kmeans(normal.matrix, i)
+  normal_SSW[i] <- K$tot.withinss
 }
-plot(1:15, worldcup_SSW, type = "b", xlab = "Number of Clusters")
+plot(1:15, normal_SSW, type = "b", xlab = "Number of Clusters")
 ```
 
-In this plot we can see a few "elbow", but we will choose 12 clusters as the SSW decreases more evenly past that point. 
+From this plot, we will choose 5 clusters as the SSW values decrease more gradually after 5 clusters than prior.
+
+This K-means test used Euclidean distance. Let's see if there is a difference when using cosine distance. 
 
 ```{r, warning = FALSE}
 # K-Means clustering with cosine distance
-norm.worldcup.matrix=diag(
-  1/sqrt(rowSums(worldcup.matrix^2))
-) %*% worldcup.matrix
+norm.normal.matrix=diag(
+  1/sqrt(rowSums(normal.matrix^2))
+) %*% normal.matrix
 
 # create manual cosine distance
-D = dist(norm.worldcup.matrix, method="euclidean")^2/2
+D = dist(norm.normal.matrix, method="euclidean")^2/2
 
-N = dim(worldcup.matrix)[1]
+N = dim(normal.matrix)[1]
 N
 dim(as.matrix(D))
 
-mds.worldcup.matrix=cmdscale(D, k=581)
+mds.normal.matrix=cmdscale(D, k=440)
 
 SSW.mds = rep(0,15)
 for(i in 1:15){
-  K=kmeans(mds.worldcup.matrix, i, nstart = 20)
+  K=kmeans(mds.normal.matrix, i, nstart = 20)
   SSW.mds[i] = K$tot.withinss
 }
 plot(1:15, SSW.mds, type = "b")
 ```
 
-From this plot we choose 6 as the number of clusters. 
+From this plot there appears to be an "elbow" at 7 clusters. This is larger than our previous result of 5 clusters, but given that these results have a fairly smooth curve, we will 
 
 ```{r}
-K=kmeans(mds.worldcup.matrix, 6, nstart=20)
-mds2.worldcup.matrix=cmdscale(D,k=2)
-plot(mds2.worldcup.matrix, col = K$cluster)
+K=kmeans(mds.normal.matrix, 7, nstart=20)
+mds2.normal.matrix=cmdscale(D,k=2)
+plot(mds2.normal.matrix, col = K$cluster)
+```
 
+The clusters are not very clear in this plot as there appears to be a lot of similarity in the skeets, hence the large bunch of point on the right. 
 
+```{r, message = FALSE, warning = FALSE}
 # Examining the cluster contents
 table(K$cluster)
 
@@ -490,11 +492,11 @@ explore_clusters <- function(x){
   #find posts assigned to this cluster
   clusterpostsId=which(K$cluster == cluster.number)
   #extract their original weighted document vectors
-  clusterposts = worldcup.matrix[clusterpostsId,]
+  clusterposts = normal.matrix[clusterpostsId,]
   #calculate the mean TF-IDF weight of each term
   clusterTermWeight=colMeans(clusterposts)
   #display the top 10 weighted terms
-  sort(clusterTermWeight, decreasing = TRUE)[1:10]
+  print(sort(clusterTermWeight, decreasing = TRUE)[1:10])
   #make wordcloud
   wordcloud(
     words = names(clusterTermWeight),
@@ -517,116 +519,26 @@ From this wordcloud we can see themes of the politics surrounding the World Cup,
 explore_clusters(2)
 ```
 
-```{r, message = FALSE, warning = FALSE}
-news_texts = news_skeets$text
+This cluster appears to show some of the emotions surrounding
 
-news.corpus=Corpus(VectorSource(news_texts))
-news.corpus = tm_map(
-  news.corpus,
-  function(x) iconv(x, to = "ASCII")
-)
-# remove_urls = content_transformer(function(x) {
-#    gsub("https?://\\S+|www\\.\\S+", " ", x, perl = TRUE)
-#    })
-remove_urls = content_transformer(function(x) {
-  gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
-})
-#remove_urls <- function(x) gsub(c("http[^[:space:]]*", "www[^[:space:]]*"), "", x) 
-news.corpus = tm_map(news.corpus, remove_urls)
-
-custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
-               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
-               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
-               "wwwbbccouksportfootba", "fecking")
-
-news.corpus=tm_map(news.corpus, removeNumbers)
-news.corpus=tm_map(news.corpus, removePunctuation)
-news.corpus=tm_map(news.corpus, stripWhitespace)
-news.corpus=tm_map(news.corpus, tolower)
-news.corpus=tm_map(news.corpus, removeWords,
-                    c(stopwords("english"), custom_words, tolower(custom_words)))
-news.corpus=tm_map(news.corpus, stemDocument)
-# I tried repeating this command after stemming as some of my custom stop words kept sneaking through
-news.corpus=tm_map(news.corpus, removeWords,
-                    c(stopwords("english"), custom_words, tolower(custom_words)))
-
-# Extract document vectors and apply TF-IDF weighting
-## Create a term-document matrix
-news.tdm=TermDocumentMatrix(news.corpus)
-# Apply TF-IDF weighting.
-news.wtdm = weightTfIdf(news.tdm)
-# Transpose so documents are rows and terms are columns.
-news.matrix = t(as.matrix(news.wtdm))
-# Remove empty texts
-empties = which(rowSums(abs(news.matrix)) == 0)
-news.matrix = news.matrix[-empties, ]
-
-news_SSW <- list()
-for(i in 1:15){
-  K = kmeans(news.matrix, i)
-  news_SSW[i] <- K$tot.withinss
-}
-plot(1:15, news_SSW, type = "b", xlab = "Number of Clusters")
-# Looks like 5 or 6 clusters is good
-
-# K-Means clustering with cosine distance
-norm.news.matrix=diag(
-  1/sqrt(rowSums(news.matrix^2))
-) %*% news.matrix
-
-# create manual cosine distance
-D = dist(norm.news.matrix, method="euclidean")^2/2
-
-N = dim(news.matrix)[1]
-N
-dim(as.matrix(D))
-
-mds.news.matrix=cmdscale(D, k=87)
-
-SSW.mds = rep(0,15)
-for(i in 1:15){
-  K=kmeans(mds.news.matrix, i, nstart = 20)
-  SSW.mds[i] = K$tot.withinss
-}
-plot(1:15, SSW.mds, type = "b")
-# hard to tell where the elbow is
-
-K=kmeans(mds.news.matrix, 5, nstart=20)
-mds2.news.matrix=cmdscale(D,k=2)
-plot(mds2.news.matrix, col = K$cluster)
-
-
-# Examining the cluster contents
-K = kmeans(mds.news.matrix, 5, nstart=20)
-table(K$cluster)
-
-# Find top terms for the first cluster
-cluster.number = 4
-#find posts assigned to this cluster
-clusterpostsId=which(K$cluster == cluster.number)
-#extract their original weighted document vectors
-clusterposts = worldcup.matrix[clusterpostsId,]
-#calculate the mean TF-IDF weight of each term
-clusterTermWeight=colMeans(clusterposts)
-#display the top 10 weighted terms
-sort(clusterTermWeight, decreasing = TRUE)[1:40]
+```{r, fig.align='center'}
+explore_clusters(3)
 ```
 
-At this stage I encountered some words in the cluster that I wanted to exclude (mainly websites that survived the `remove_urls` command), so I added these terms to my stop words and repeated the above code until I was satisfied that all irrelevant terms were removed. 
+This cluster shows discussions of Donald Trump, Gianni Infantino (the head of FIFA) and corruption. 
 
-```{r, message = FALSE, warning = FALSE}
-#make wordcloud
-wordcloud(
-  words = names(clusterTermWeight),
-  freq = clusterTermWeight,
-  min.freq = 3,
-  max.words = 100,
-  random.order = FALSE,
-  rot.per = 0.35,
-  colors = brewer.pal(8, "Dark2"),
-  scale = c(2, .5)
-)
+```{r, fig.align='center'}
+explore_clusters(4)
 ```
+
+```{r, fig.align='center'}
+explore_clusters(5)
+```
+
+```{r, fig.align='center'}
+explore_clusters(6)
+```
+
 
 ### Hierarchical Clustering
 
