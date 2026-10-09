@@ -351,86 +351,30 @@ Investigate whether meaningful clusters can be identified in the textual/content
 Make appropriate decisions about the representation of the data, distance measure and number of clusters, and justify these decisions. Visualise your clusters and summarise the themes or characteristics of each cluster.
 Your clustering analysis should go beyond simply running an R function and reporting the cluster labels.
 
-### Separate the data into news and normal users
+Given that the previous results indicate the main topic of the skeets revolve around a particular news story, we can assess if clustering also suggests this. 
 
-As the previous results already highlight keywords from `wc_en` skeets, I thought we could investigate if the apparent themes will change based on if the user is a news site or a normal user. As the prior key words seemed to follow a news story, I will focus on normal users skeets only to see if they differ from the overall themes. 
+First we must build a corpus from the skeets that we can eventually transform into a matrix.
 
-```{r}
-# First we get the locations of the skeets from news sites using the `grep` command
-# Some normal users may end up in the list, but this is difficult to avoid
-# This may also not catch all news sites if these key words are not in their Bluesky handles
-news_skeet_locations = c(grep("news", wc_en$author_handle),
-                         grep("org", wc_en$author_handle),
-                         grep("net", wc_en$author_handle),
-                         grep("com", wc_en$author_handle),
-                         grep("hub", wc_en$author_handle),
-                         grep("times", wc_en$author_handle))
-print(news_skeet_locations)
-length(news_skeet_locations)
-```
-
-There are approximately 84 skeets out of 793 from news sites (approximate as some news sites may have been missed and some normal users may have been included in this search), so the remaining skeets should be from normal users. 
-
-Now we can split our `wc_en` data into two, one for news skeets and one for normal skeets. 
-
-```{r}
-news_skeets = wc_en[news_skeet_locations,]
-normal_skeets = wc_en[-news_skeet_locations,]
-```
-
-Now that we've separated the normal skeets from the news skeets, we can create a corpus for clustering. 
-
-```{r, message = FALSE, warning = FALSE}
-normal_texts = normal_skeets$clean_text
-
-normal.corpus=Corpus(VectorSource(normal_texts))
-normal.corpus = tm_map(
-  normal.corpus,
+```{r, warning = FALSE}
+worldcup.corpus=Corpus(VectorSource(wc_en$clean_text))
+worldcup.corpus = tm_map(
+  worldcup.corpus,
   function(x) iconv(x, to = "ASCII")
 )
-# remove_urls = content_transformer(function(x) {
-#    gsub("https?://\\S+|www\\.\\S+", " ", x, perl = TRUE)
-#    })
-#remove_urls <- function(x) gsub(c("http[^[:space:]]*", "www[^[:space:]]*"), "", x) 
-
-# remove_urls = content_transformer(function(x) {
-#   gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
-# })
-# normal.corpus = tm_map(normal.corpus, remove_urls)
-custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
-               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
-               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
-               "wwwbbccouksportfootba", "fecking", "youtubecompostugkxt","newsskycomstoryworld",
-               "bbcinfwjcxo", "sportsyahoocomarticlesuef", "youtubecomshortsbliaq",
-               "apnewscomarticlefifa","nypostcomb", "fuckall", "fuckfifa", "www", "bbc", "tiktok",
-               "theguardian", "abc", "footbal","apnew", "fwjcxo", "cnn", "ugkx", "post", "nypost", 
-               "meidasnew", "euronew", "cbc", "wsj","sky", "npr", "articl", "mirror", "independ", 
-               "footba", "shit", "org", "espn", "stori", "aljazeera")
-
-# The data has already been partially cleaned, with numbers, white space, punctuation, and capitals removed
-# Urls were not removed but have been split apart
-# The above custom words seek to remedy that
-
-#normal.corpus=tm_map(normal.corpus, removeNumbers)
-#normal.corpus=tm_map(normal.corpus, removePunctuation)
-#normal.corpus=tm_map(normal.corpus, stripWhitespace)
-#normal.corpus=tm_map(normal.corpus, tolower)
-normal.corpus=tm_map(normal.corpus, removeWords,
-                    c(stopwords("english"), custom_words, tolower(custom_words)))
-normal.corpus=tm_map(normal.corpus, stemDocument)
-#normal.corpus=tm_map(normal.corpus, removeWords,
- #                   c(stopwords("english"), custom_words, tolower(custom_words)))
-
+# We will remove more words before continuing
+custom_words = c("com", "www", "org", "fuck", "shit")
+worldcup.corpus = tm_map(worldcup.corpus, removeWords, c(stopwords("english"), custom_words, tolower(custom_words)))
 # Extract document vectors and apply TF-IDF weighting
 ## Create a term-document matrix
-normal.tdm=TermDocumentMatrix(normal.corpus)
+worldcup.tdm=TermDocumentMatrix(worldcup.corpus)
 # Apply TF-IDF weighting.
-normal.wtdm = weightTfIdf(normal.tdm)
+worldcup.wtdm = weightTfIdf(worldcup.tdm)
 # Transpose so documents are rows and terms are columns.
-normal.matrix = t(as.matrix(normal.wtdm))
+worldcup.matrix = t(as.matrix(worldcup.wtdm))
 # Remove empty texts
-empties = which(rowSums(abs(normal.matrix)) == 0)
-normal.matrix = normal.matrix[-empties, ]
+empties = which(rowSums(abs(worldcup.matrix)) == 0)
+empties
+# There are no empty rows, so we don't need to apply this to the matrix
 ```
 
 ### K-Means Clustering
@@ -440,50 +384,50 @@ When using K-means clustering, we need to decide the appropriate amount of clust
 We start by observing the SSWs for clusters of size 1 to 15. 
 
 ```{r}
-normal_SSW <- list()
+worldcup_SSW <- list()
 for(i in 1:15){
-  K = kmeans(normal.matrix, i)
-  normal_SSW[i] <- K$tot.withinss
+  K = kmeans(worldcup.matrix, i)
+  worldcup_SSW[i] <- K$tot.withinss
 }
-plot(1:15, normal_SSW, type = "b", xlab = "Number of Clusters")
+plot(1:15, worldcup_SSW, type = "b", xlab = "Number of Clusters")
 ```
 
-From this plot, we will choose 5 clusters as the SSW values decrease more gradually after 5 clusters than prior.
+From this plot, we see an elbow at 11 clusters. 
 
 This K-means test used Euclidean distance. Let's see if there is a difference when using cosine distance. 
 
 ```{r, warning = FALSE}
 # K-Means clustering with cosine distance
-norm.normal.matrix=diag(
-  1/sqrt(rowSums(normal.matrix^2))
-) %*% normal.matrix
+norm.worldcup.matrix=diag(
+  1/sqrt(rowSums(worldcup.matrix^2))
+) %*% worldcup.matrix
 
 # create manual cosine distance
-D = dist(norm.normal.matrix, method="euclidean")^2/2
+D = dist(norm.worldcup.matrix, method="euclidean")^2/2
 
-N = dim(normal.matrix)[1]
+N = dim(worldcup.matrix)[1]
 N
 dim(as.matrix(D))
 
-mds.normal.matrix=cmdscale(D, k=702)
+mds.worldcup.matrix=cmdscale(D, k=87)
 
 SSW.mds = rep(0,15)
 for(i in 1:15){
-  K=kmeans(mds.normal.matrix, i, nstart = 20)
+  K=kmeans(mds.worldcup.matrix, i, nstart = 20)
   SSW.mds[i] = K$tot.withinss
 }
 plot(1:15, SSW.mds, type = "b")
 ```
 
-From this plot there appears to be an "elbow" at 7 clusters. This is larger than our previous result of 5 clusters, but given that these results have a fairly smooth curve, we will 
+There isn't an obvious elbow in this plot, but we could choose a cluster from about 8 upwards. We will choose 8 for now. 
 
 ```{r}
-K=kmeans(mds.normal.matrix, 10, nstart=20)
-mds2.normal.matrix=cmdscale(D,k=2)
-plot(mds2.normal.matrix, col = K$cluster)
+K=kmeans(mds.worldcup.matrix, 8, nstart=20)
+mds2.worldcup.matrix=cmdscale(D,k=2)
+plot(mds2.worldcup.matrix, col = K$cluster)
 ```
 
-The clusters are not very clear in this plot as there appears to be a lot of similarity in the skeets, hence the large bunch of point on the right. 
+It is evident from this plot that most skeets contain similar words/content as the points are largely bunched.
 
 ```{r, message = FALSE, warning = FALSE, fig.align = 'center'}
 # Examining the cluster contents
@@ -495,7 +439,7 @@ explore_clusters <- function(x){
   #find posts assigned to this cluster
   clusterpostsId=which(K$cluster == cluster.number)
   #extract their original weighted document vectors
-  clusterposts = normal.matrix[clusterpostsId,]
+  clusterposts = worldcup.matrix[clusterpostsId,]
   #calculate the mean TF-IDF weight of each term
   clusterTermWeight=colMeans(clusterposts)
   #display the top 10 weighted terms
@@ -516,127 +460,6 @@ explore_clusters(1)
 
 ```
 
-From this wordcloud we can see themes of the politics surrounding the World Cup, particularly for Europe and the UEFA (Union of European Football Associations). People are calling for some sort of boycott, and there seem to be discussions about sales and investments in relation to that. 
-
-```{r, fig.align='center'}
-explore_clusters(2)
-```
-
-This cluster appears to show some of the emotions surrounding
-
-```{r, fig.align='center'}
-explore_clusters(3)
-```
-
-This cluster shows discussions of Donald Trump, Gianni Infantino (the head of FIFA) and corruption. 
-
-```{r, fig.align='center'}
-explore_clusters(4)
-```
-
-```{r, fig.align='center'}
-explore_clusters(5)
-```
-
-```{r, fig.align='center'}
-explore_clusters(6)
-```
-
-
-### Hierarchical Clustering
-
-```{r, warning = FALSE, message = FALSE}
-# First we set up the text vectors 
-normal_texts = normal_skeets$text
-news_texts = news_skeets$text
-
-# Now we create an index with 199 "News" entries and 185 "Normal" entries
-index = c(rep("News", length(news_texts)),
-          rep("Normal", length(normal_texts)))
-
-worldcup.corpus=Corpus(VectorSource(wc_en$clean_text))
-worldcup.corpus = tm_map(
-  worldcup.corpus,
-  function(x) iconv(x, to = "ASCII")
-)
-#worldcup.corpus = tm_map(worldcup.corpus, remove_urls)
-
-custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
-               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
-               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
-               "wwwbbccouksportfootba", "fecking")
-
-worldcup.corpus=tm_map(worldcup.corpus, removeNumbers)
-worldcup.corpus=tm_map(worldcup.corpus, removePunctuation)
-worldcup.corpus=tm_map(worldcup.corpus, stripWhitespace)
-worldcup.corpus=tm_map(worldcup.corpus, tolower)
-worldcup.corpus=tm_map(worldcup.corpus, removeWords,
-                   c(stopwords("english"), custom_words, tolower(custom_words)))
-worldcup.corpus=tm_map(worldcup.corpus, stemDocument)
-# I tried repeating this command after stemming as some of my custom stop words kept sneaking through
-worldcup.corpus=tm_map(worldcup.corpus, removeWords,
-                   c(stopwords("english"), custom_words, tolower(custom_words)))
-
-# Extract document vectors and apply TF-IDF weighting
-## Create a term-document matrix
-worldcup.tdm=TermDocumentMatrix(worldcup.corpus)
-# Apply TF-IDF weighting.
-worldcup.wtdm = weightTfIdf(worldcup.tdm)
-# Transpose so documents are rows and terms are columns.
-worldcup.matrix = t(as.matrix(worldcup.wtdm))
-
-# Need to repeat the below code so we can locate the empty worldcup matrix locations
-empties = which(rowSums(abs(worldcup.matrix))==0)
-index = index[-empties]
-worldcup.matrix = worldcup.matrix[-empties,]
-
-id.News = which(index == "News")[1:10]
-id.Normal = which(index == "Normal")[1:10]
-
-new.posts.matrix = worldcup.matrix[c(id.News, id.Normal),]
-
-norm.posts.matrix = diag(
-  1/sqrt(rowSums(new.posts.matrix^2))
-) %*% new.posts.matrix
-rownames(norm.posts.matrix) = rownames(new.posts.matrix)
-
-#cosine distance
-D = dist(norm.posts.matrix, method = "euclidean")^2/2
-
-#apply and plot single-linkage hierarchical clustering
-h = hclust(D, method = "single")
-plot(h, main = "Single-Linkage Clustering")
-
-#with complete-linkage
-h = hclust(D, method="complete")
-plot(h, main = "Complete-Linkage Clustering")
-
-# in both, posts 6 and 125 are joined first
-# complete-linkage yields clearer groupings
-
-# Optional | Adding Colour
-
-library(dendextend)
-#Create group colours, convert the result to a dendrogram and reorder the colours to match its leaves:
-  # Black: Labor; red: Liberal; green: Greens.
-colors_to_use = as.numeric(c(
-    rep(1, 10),
-    rep(2, 10)
-  ))
-dend = as.dendrogram(h)
-colors_to_use = colors_to_use[order.dendrogram(dend)]
-labels_colors(dend) = colors_to_use
-#Plot the coloured dendrogram and add a legend:
-plot(dend, main = "A Colour for Each Post Group")
-legend(
-  "topright",
-  legend = c("News", "Normal"),
-  col = c(1, 2, 3),
-  pch = 20,
-  ncol = 3,
-  cex = 0.5
-)  
-```
 
 
 ## Network Analysis 
@@ -773,8 +596,8 @@ g_seed_news <- graph_from_edgelist(news_edgelist_seed, directed = T)
 g_normal <- graph_from_edgelist(normal_edgelist,directed=T)
 g_news <- graph_from_edgelist(news_edgelist,directed=T)
 # Graph the induced subgraph
-g2_normal <- induced_subgraph(g,V(g)[degree(g)>1])
-g2_news <- induced_subgraph(g,V(g)[degree(g)>1])
+g2_normal <- induced_subgraph(g_normal,V(g_normal)[degree(g_normal)>1])
+g2_news <- induced_subgraph(g_news,V(g_news)[degree(g_news)>1])
 
 # Plot the seed user and direct likes only
 par(mfrow=c(1,2))
@@ -879,7 +702,9 @@ Once again, `npr.org` is the most central, this time using the igraph closeness 
 round(head(sort(betweenness(g_news,directed=T),
                 decreasing=T), 10), 4)
 ```
-This time `pfalcon.bsky.social` is most central, and `npr.org` doesn't make the top ten more central. 
+This time `pfalcon.bsky.social` is most central, and `npr.org` doesn't make the top ten most central. 
+
+To conclude, the likes network for the news user is more dense than that for the normal user, but both networks have low density. 
 
 # Conclusion
 
