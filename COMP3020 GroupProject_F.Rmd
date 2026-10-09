@@ -140,30 +140,22 @@ As the project is being completed on multiple devices, it is important to make s
 load("WorldCupSkeets.RData")
 ```
 
-\newpage
 
-## Hypothesis Testing | Neville
+## Data Cleaning | Neville
 
-Develop a research question that can be addressed using hypothesis testing. The research question may involve any suitable variables in the data collected from the social web, but should contribute to the overall investigation.
-Clearly state the hypotheses and select an appropriate statistical test from those covered in COMP3020.
-Explain why the test is suitable and interpret the result in the context of your research question.
-Hint: Consider whether characteristics of posts, users, films or other entities in your dataset can be compared or associated in a way that addresses an interesting question.
-
-Data Cleaning | Neville
-
-```{r load-packages}
+```{r load-packages, message = FALSE}
 library(tidyverse)
 library(tidytext)
 library(wordcloud)
 library(RColorBrewer)
 ```
-Checking the data before cleaning
+#### Checking the data before cleaning
 ````{r check-before-cleaning}
 nrow(worldcup) #posts before cleaning
 sum(is.na(worldcup$text)) #post with missing text
 sum(duplicated(worldcup$uri)) #duplicate posts
 ````
-Cleaning
+#### Cleaning
 ```{r clean-data}
 wc <- worldcup%>%
 distinct(uri, .keep_all = TRUE) %>% #remove duplicates
@@ -185,26 +177,27 @@ total_engagement = like_count + repost_count + reply_count + quote_count
 filter(clean_text != "") # remove posts empty after cleaning
 nrow(wc) # posts after cleaning
 ```
-English posts only (the keyword search and stop words only work in English)
+#### English posts only (the keyword search and stop words only work in English)
 ```{r english-only}
 wc_en <- wc %>%
 filter(sapply(langs, function(x) "en" %in% x))
 nrow(wc_en) # English posts
 ```
-Hypothesis Testing | Neville
+## Hypothesis Testing | Neville
 
 Develop a research question that can be addressed using hypothesis testing. The research question may involve any suitable variables in the data collected from the social web, but should contribute to the overall investigation.
 Clearly state the hypotheses and select an appropriate statistical test from those covered in COMP3020.
 Explain why the test is suitable and interpret the result in the context of your research question.
 Hint: Consider whether characteristics of posts, users, films or other entities in your dataset can be compared or associated in a way that addresses an interesting question.
-Research question Do posts mentioning a host country (USA, Canada, Mexico)
-differ in engagement from posts that don't?
+
+### Research question Do posts mentioning a host country (USA, Canada, Mexico) differ in engagement from posts that don't?
+
 ```{r create-groups}
 wc_en <- wc_en %>%
 mutate(
 mentions_host = str_detect(
 clean_text,
-"\b(usa|united states|canada|mexico)\b"
+"\\b(usa|united states|canada|mexico)\\b"
 ),
 host_group = if_else(mentions_host, "Mentions host country", "No host country"),
 host_group = factor(host_group,
@@ -241,14 +234,15 @@ H0: The distribution of engagement is the same for posts that mention a host cou
 H1: The distribution of engagement differs between the two groups.
 Test: Wilcoxon rank-sum (Mann-Whitney U) test. The two groups are independent, and the plots above show engagement is heavily right-skewed with many zeros, so the normality assumption of a t-test is not met.
 ```{r wilcoxon-test}
-table(wc_en$host_group, useNA = "ifany")
 wilcox.test(total_engagement ~ host_group, data = wc_en, exact = FALSE)
-wilcox.test(wc_en$total_engagement, wc_en$host_group, paired = TRUE)
 ```
 Interpretation: We used a Wilcoxon rank-sum test to check whether posts mentioning a host country (USA, Canada or Mexico) had different engagement levels. The test returned W = 3792.5 and p = 0.044. Since the p-value is below 0.05, we rejected the null hypothesis and found a statistically significant difference between the two groups.
+
 Posts mentioning a host country had higher engagement, with a mean of 67.9 and median of 3.5 interactions. In comparison, other posts had a mean of 34.5 and median of 1.0. Also, 85.7% of host-country posts received engagement, compared to 62.8% of other posts.
+
 However, only 14 posts mentioned a host country, compared to 779 others. A few popular posts may have influenced the results, and the p-value was close to 0.05. We also may have missed posts referring to countries indirectly. Therefore, these findings only apply to our sample of English-language Bluesky posts and do not prove that mentioning a host country causes higher engagement.
-Text/Content Analysis and Visualisation | Neville
+
+## Text/Content Analysis and Visualisation | Neville
 
 Clean the data and address missing or unsuitable records. Explore the textual/content characteristics of your data and represent the text in an appropriate form for further analysis. Provide relevant summaries and at least two informative visualisations, including a visualisation of frequent words.
 Interpret the patterns you identify and explain how they contribute to your investigation.
@@ -268,9 +262,12 @@ x = "Number of words",
 y = "Number of posts")
 ```
 Interpretation
+
 The 793 English posts varied in length, ranging from 12 to 319 characters. The median word count was 25, with an average of 26.5 words per post. Since the mean and median are close, the word counts were fairly balanced overall.
+
 The histogram showed that many posts contained 5 words or fewer, while most others were between 10 and 50 words. Posts longer than 50 words were less common. The shorter posts may mainly contain links, hashtags or mentions rather than longer text.
-Word frequencies
+
+### Word frequencies
 
 ```{r tokenise}
 #words to remove: our search terms and some filler words
@@ -295,11 +292,14 @@ nrow(word_freq) # number of different words
 ```
 
 Interpretation
-The most common words in the English posts were "uefa" (342 times), "infantino" (205), "boycott" (195) and "football" (149). Other frequent words included "trump", "private", "investors" and "kushner". This suggests that many posts focused on a specific news story involving UEFA, FIFA president Gianni Infantino, private investors and a possible boycott, rather than general World Cup discussion.
-This means the dataset may not represent World Cup discussions overall, as many posts appear to focus on the same topic. This could also affect the clustering results, as posts may be grouped based on this news story. Words such as "footba" and "www" were removed because they came from cut-off text or web addresses.
-Visualisations
 
-```{r top-words-bar}
+The most common words in the English posts were "uefa" (342 times), "infantino" (205), "boycott" (195) and "football" (149). Other frequent words included "trump", "private", "investors" and "kushner". This suggests that many posts focused on a specific news story involving UEFA, FIFA president Gianni Infantino, private investors and a possible boycott, rather than general World Cup discussion.
+
+This means the dataset may not represent World Cup discussions overall, as many posts appear to focus on the same topic. This could also affect the clustering results, as posts may be grouped based on this news story. Words such as "footba" and "www" were removed because they came from cut-off text or web addresses.
+
+### Visualisations
+
+```{r top-words-bar, fig.align = 'center'}
 #bar chart of the 15 most common words
 
 word_freq %>%
@@ -326,9 +326,9 @@ colors = brewer.pal(8, "Dark2"))
 host_counts <- tibble(
 country = c("USA", "Canada", "Mexico"),
 posts = c(
-sum(str_detect(wc_en$clean_text, "\b(usa|united states)\b")),
-sum(str_detect(wc_en$clean_text, "\bcanada\b")),
-sum(str_detect(wc_en$clean_text, "\bmexico\b"))
+sum(str_detect(wc_en$clean_text, "\\b(usa|united states)\\b")),
+sum(str_detect(wc_en$clean_text, "\\bcanada\\b")),
+sum(str_detect(wc_en$clean_text, "\\bmexico\\b"))
 )
 )
 ggplot(host_counts, aes(x = reorder(country, posts), y = posts)) +
@@ -338,18 +338,14 @@ x = "Host country",
 y = "Number of posts")
 ```
 Interpretation
+
 The bar chart and word cloud show that the most common words were "uefa", "infantino", "boycott" and "football". This suggests that most posts focused on a news story involving UEFA, FIFA president Gianni Infantino and a possible boycott, rather than matches or players.
+
 The date table shows that almost all posts were from 30 July 2026. This means the data only represents discussion from one day, possibly because the search returned the latest posts first and stopped at around 1,000 posts.
+
 The USA was mentioned in 10 posts, Canada in 4 and Mexico in 1. These total more than 14 because some posts mentioned multiple countries. Overall, the data focuses heavily on one news story, which limits the hypothesis test and may affect the clustering results.
 
-## Text/Content Analysis and Visualisation | Neville 
-
-Clean the data and address missing or unsuitable records. Explore the textual/content characteristics of your data and represent the text in an appropriate form for further analysis. Provide relevant summaries and at least two informative visualisations, including a visualisation of frequent words.
-Interpret the patterns you identify and explain how they contribute to your investigation.
-
-\newpage
-
-## Clustering | Farhana and Annelise
+## Clustering
 
 Investigate whether meaningful clusters can be identified in the textual/content data.
 Make appropriate decisions about the representation of the data, distance measure and number of clusters, and justify these decisions. Visualise your clusters and summarise the themes or characteristics of each cluster.
@@ -382,10 +378,10 @@ news_skeets = wc_en[news_skeet_locations,]
 normal_skeets = wc_en[-news_skeet_locations,]
 ```
 
-Now that we've separated the normal skeets from the news skeets, we can create a corpus and clean the data for clustering. 
+Now that we've separated the normal skeets from the news skeets, we can create a corpus for clustering. 
 
 ```{r, message = FALSE, warning = FALSE}
-normal_texts = normal_skeets$text
+normal_texts = normal_skeets$clean_text
 
 normal.corpus=Corpus(VectorSource(normal_texts))
 normal.corpus = tm_map(
@@ -397,26 +393,33 @@ normal.corpus = tm_map(
 #    })
 #remove_urls <- function(x) gsub(c("http[^[:space:]]*", "www[^[:space:]]*"), "", x) 
 
-remove_urls = content_transformer(function(x) {
-  gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
-})
-normal.corpus = tm_map(normal.corpus, remove_urls)
+# remove_urls = content_transformer(function(x) {
+#   gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
+# })
+# normal.corpus = tm_map(normal.corpus, remove_urls)
 custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
                "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
                "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
                "wwwbbccouksportfootba", "fecking", "youtubecompostugkxt","newsskycomstoryworld",
-               "bbcinfwjcxo", "sportsyahoocomarticlesuef", "youtubecomshortsbliaq","apnewscomarticlefifa",
-               "nypostcomb", "fuckall", "fuckfifa")
+               "bbcinfwjcxo", "sportsyahoocomarticlesuef", "youtubecomshortsbliaq",
+               "apnewscomarticlefifa","nypostcomb", "fuckall", "fuckfifa", "www", "bbc", "tiktok",
+               "theguardian", "abc", "footbal","apnew", "fwjcxo", "cnn", "ugkx", "post", "nypost", 
+               "meidasnew", "euronew", "cbc", "wsj","sky", "npr", "articl", "mirror", "independ", 
+               "footba", "shit", "org", "espn", "stori", "aljazeera")
 
-normal.corpus=tm_map(normal.corpus, removeNumbers)
-normal.corpus=tm_map(normal.corpus, removePunctuation)
-normal.corpus=tm_map(normal.corpus, stripWhitespace)
-normal.corpus=tm_map(normal.corpus, tolower)
+# The data has already been partially cleaned, with numbers, white space, punctuation, and capitals removed
+# Urls were not removed but have been split apart
+# The above custom words seek to remedy that
+
+#normal.corpus=tm_map(normal.corpus, removeNumbers)
+#normal.corpus=tm_map(normal.corpus, removePunctuation)
+#normal.corpus=tm_map(normal.corpus, stripWhitespace)
+#normal.corpus=tm_map(normal.corpus, tolower)
 normal.corpus=tm_map(normal.corpus, removeWords,
                     c(stopwords("english"), custom_words, tolower(custom_words)))
 normal.corpus=tm_map(normal.corpus, stemDocument)
-normal.corpus=tm_map(normal.corpus, removeWords,
-                    c(stopwords("english"), custom_words, tolower(custom_words)))
+#normal.corpus=tm_map(normal.corpus, removeWords,
+ #                   c(stopwords("english"), custom_words, tolower(custom_words)))
 
 # Extract document vectors and apply TF-IDF weighting
 ## Create a term-document matrix
@@ -462,7 +465,7 @@ N = dim(normal.matrix)[1]
 N
 dim(as.matrix(D))
 
-mds.normal.matrix=cmdscale(D, k=440)
+mds.normal.matrix=cmdscale(D, k=702)
 
 SSW.mds = rep(0,15)
 for(i in 1:15){
@@ -475,14 +478,14 @@ plot(1:15, SSW.mds, type = "b")
 From this plot there appears to be an "elbow" at 7 clusters. This is larger than our previous result of 5 clusters, but given that these results have a fairly smooth curve, we will 
 
 ```{r}
-K=kmeans(mds.normal.matrix, 7, nstart=20)
+K=kmeans(mds.normal.matrix, 10, nstart=20)
 mds2.normal.matrix=cmdscale(D,k=2)
 plot(mds2.normal.matrix, col = K$cluster)
 ```
 
 The clusters are not very clear in this plot as there appears to be a lot of similarity in the skeets, hence the large bunch of point on the right. 
 
-```{r, message = FALSE, warning = FALSE}
+```{r, message = FALSE, warning = FALSE, fig.align = 'center'}
 # Examining the cluster contents
 table(K$cluster)
 
@@ -542,16 +545,47 @@ explore_clusters(6)
 
 ### Hierarchical Clustering
 
-```{r}
-# First we set up our normal_texts 
+```{r, warning = FALSE, message = FALSE}
+# First we set up the text vectors 
 normal_texts = normal_skeets$text
+news_texts = news_skeets$text
 
 # Now we create an index with 199 "News" entries and 185 "Normal" entries
 index = c(rep("News", length(news_texts)),
           rep("Normal", length(normal_texts)))
 
-# Need to repeat the below code so we can locate the empty worldcup matrix locations
+worldcup.corpus=Corpus(VectorSource(wc_en$clean_text))
+worldcup.corpus = tm_map(
+  worldcup.corpus,
+  function(x) iconv(x, to = "ASCII")
+)
+#worldcup.corpus = tm_map(worldcup.corpus, remove_urls)
+
+custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
+               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
+               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
+               "wwwbbccouksportfootba", "fecking")
+
+worldcup.corpus=tm_map(worldcup.corpus, removeNumbers)
+worldcup.corpus=tm_map(worldcup.corpus, removePunctuation)
+worldcup.corpus=tm_map(worldcup.corpus, stripWhitespace)
+worldcup.corpus=tm_map(worldcup.corpus, tolower)
+worldcup.corpus=tm_map(worldcup.corpus, removeWords,
+                   c(stopwords("english"), custom_words, tolower(custom_words)))
+worldcup.corpus=tm_map(worldcup.corpus, stemDocument)
+# I tried repeating this command after stemming as some of my custom stop words kept sneaking through
+worldcup.corpus=tm_map(worldcup.corpus, removeWords,
+                   c(stopwords("english"), custom_words, tolower(custom_words)))
+
+# Extract document vectors and apply TF-IDF weighting
+## Create a term-document matrix
+worldcup.tdm=TermDocumentMatrix(worldcup.corpus)
+# Apply TF-IDF weighting.
+worldcup.wtdm = weightTfIdf(worldcup.tdm)
+# Transpose so documents are rows and terms are columns.
 worldcup.matrix = t(as.matrix(worldcup.wtdm))
+
+# Need to repeat the below code so we can locate the empty worldcup matrix locations
 empties = which(rowSums(abs(worldcup.matrix))==0)
 index = index[-empties]
 worldcup.matrix = worldcup.matrix[-empties,]
@@ -571,11 +605,11 @@ D = dist(norm.posts.matrix, method = "euclidean")^2/2
 
 #apply and plot single-linkage hierarchical clustering
 h = hclust(D, method = "single")
-plot(h)
+plot(h, main = "Single-Linkage Clustering")
 
 #with complete-linkage
 h = hclust(D, method="complete")
-plot(h)
+plot(h, main = "Complete-Linkage Clustering")
 
 # in both, posts 6 and 125 are joined first
 # complete-linkage yields clearer groupings
@@ -596,16 +630,16 @@ labels_colors(dend) = colors_to_use
 plot(dend, main = "A Colour for Each Post Group")
 legend(
   "topright",
-  legend = c("Labor", "Liberal", "Greens"),
+  legend = c("News", "Normal"),
   col = c(1, 2, 3),
   pch = 20,
   ncol = 3,
   cex = 0.5
 )  
 ```
-\newpage
 
-## Network Analysis | Annelise
+
+## Network Analysis 
 
 Construct a network from meaningful relationships in the data, such as follows, replies, mentions, reposts, film–actor links, film–director links or actor co-appearances. The relationships represented by the edges must come from the data; arbitrary relationships created simply to satisfy the network requirement are not acceptable. Aim to construct a sufficiently large and well-connected network that allows meaningful analysis.
 • Define nodes and edges, explain what edges represent and justify whether the graph is directed or
@@ -621,6 +655,8 @@ affect your findings.
 
 We chose to construct a Bluesky network based on skeet likes. Our seed user is the user whose post has the highest like count out of all the skeets in our database. From there, we will identify a portion of the people who liked that skeet, then extract some of their own skeets and find people who have liked those. 
 
+#### Research Question: Is the likes network more dense with a news site as the seed user or with a normal user as the seed user?
+
 ```{r, fig.align = 'center', fig.dim=c(8,6), out.width = "100%", message = FALSE}
 library(dplyr)
 # Create new worldcup data frame that is ordered from most likes to least likes
@@ -632,118 +668,182 @@ author_info_likes <- get_user_info(unique(worldcup_likes_order$author_handle))
 # Display the five authors with the most likes
 top_candidates <- head(author_info_likes[, c("actor_handle", "actor_name", "follows_count")], 5)
 top_candidates
+```
 
-# Our seed user will be the first row of our author_info_likes data frame
-seed_user_likes_handle <- author_info_likes$actor_handle[1]
-seed_user_likes_handle
+From the top 5 candidates, we can see that a normal user, `isismashagain.bsky.social` has the most likes and that the most liked news skeet comes from `npr.org`. 
 
-# Find the seed users' skeet (post) (first entry in reordered worldcup posts)
-seed_user_likes_post <- worldcup_likes_order[1,]
+```{r, warning = FALSE, message = FALSE}
+# Our normal seed user will be the first row of our author_info_likes data frame
+seed_normal_likes_handle <- author_info_likes$actor_handle[1]
+seed_news_likes_handle <- author_info_likes$actor_handle[5]
+
+# Find the seed users posts
+seed_normal_likes_post <- worldcup_likes_order[1,]
+seed_news_likes_post <- worldcup_likes_order[5,]
 
 # Now we can see who liked this post. We limit the search to 20 users for the sake of interpretation.
-likes_handles <- get_likes(seed_user_likes_post$uri, limit = 20)$actor_handle
-head(likes_handles)
+normal_likes_handles <- get_likes(seed_normal_likes_post$uri, limit = 20)$actor_handle
+head(normal_likes_handles)
+news_likes_handles <- get_likes(seed_news_likes_post$uri, limit = 20)$actor_handle
+head(news_likes_handles)
 
-# Collect a selection of skeets from each of the likes_handles feeds
-feeds <- list()
-for(i in 1:length(likes_handles)){
-  feeds[[i]] <- data.frame(get_skeets_authored_by(likes_handles[i], limit = 2))
-}
+# Collect a selection of skeets from each of the normal_likes_handles feeds
+normal_feeds <- list()
+for(i in 1:length(normal_likes_handles)){
+  normal_feeds[[i]] <- data.frame(get_skeets_authored_by(normal_likes_handles[i], limit = 2))
+} # we limit to 2 as otherwise there is too much data to handle
 # Transform the list into a dataframe
-likes_feeds_df <- do.call(rbind, feeds)
+normal_likes_feeds_df <- do.call(rbind, normal_feeds)
 ## Note that not all of the skeets a user has posted are originally theirs, some are reposts.
-dim(likes_feeds_df)[1]
-length(likes_feeds_df)
+dim(normal_likes_feeds_df)[1]
+length(normal_likes_feeds_df)
 # Find who has liked posts from the likes_handles. 
-more_likes <- list()
-for(i in 1:dim(likes_feeds_df)[1]){
-  more_likes[[i]] <- get_likes(likes_feeds_df[i,]$uri, limit = 10)
+normal_more_likes <- list()
+for(i in 1:dim(normal_likes_feeds_df)[1]){
+  normal_more_likes[[i]] <- get_likes(normal_likes_feeds_df[i,]$uri, limit = 10)
 }
-more_likes_handles <- lapply(more_likes, '[[', "actor_handle")
-sapply(more_likes_handles, length)
+normal_more_likes_handles <- lapply(normal_more_likes, '[[', "actor_handle")
+sapply(normal_more_likes_handles, length)
 
-# Create directed edge list
+# Repeat process for news_likes_handles
+news_feeds <- list()
+for(i in 1:length(news_likes_handles)){
+  news_feeds[[i]] <- data.frame(get_skeets_authored_by(news_likes_handles[i], limit = 2))}
+news_likes_feeds_df <- do.call(rbind, news_feeds)
+dim(news_likes_feeds_df)[1]
+length(news_likes_feeds_df)
+news_more_likes <- list()
+for(i in 1:dim(news_likes_feeds_df)[1]){
+  news_more_likes[[i]] <- get_likes(news_likes_feeds_df[i,]$uri, limit = 10)
+}
+news_more_likes_handles <- lapply(news_more_likes, '[[', "actor_handle")
+sapply(news_more_likes_handles, length)
+
+# Create directed edge list for normal users
 ## Make one row for each edge from the seed user to a liker
-edgelist_seed <- cbind(
-  from=rep(seed_user_likes_handle, length(likes_handles)),
-  to=likes_handles
+normal_edgelist_seed <- cbind(
+  from=rep(seed_normal_likes_handle, length(normal_likes_handles)),
+  to=normal_likes_handles
 )
 
 ## Make the second-level edges, one liker at a time
-edgelist_friends <- lapply(seq_along(likes_handles), function(i) {
-  cbind(from =rep(likes_handles[i],
-                  length(more_likes_handles[[i]])),
-        to=more_likes_handles[[i]])
+normal_edgelist_friends <- lapply(seq_along(normal_likes_handles), function(i) {
+  cbind(from =rep(normal_likes_handles[i],
+                  length(normal_more_likes_handles[[i]])),
+        to=normal_more_likes_handles[[i]])
 })
-
 # Join the first and second level edges into one edge list
-edgelist <- unique(rbind(edgelist_seed, do.call(rbind,edgelist_friends))) 
+normal_edgelist <- unique(rbind(normal_edgelist_seed, do.call(rbind,normal_edgelist_friends))) 
 # Remove self-likes, where an account would point to itself
-edgelist <- edgelist[edgelist[,"from"] != edgelist[,"to"], , drop = FALSE]
-# Remove rows where columns are NA
-#edgelist_clean <- edgelist[!apply(is.na(edgelist) | edgelist == "", 1, all), ]
+normal_edgelist <- normal_edgelist[normal_edgelist[,"from"] != normal_edgelist[,"to"], , drop = FALSE]
 
 # Show the number of rows and columns in the final edge list
-dim(edgelist)
+dim(normal_edgelist)
 # Preview the first few follow relationships
-head(edgelist)
+head(normal_edgelist)
+
+# Repeat edgelists for news users
+news_edgelist_seed <- cbind(
+  from=rep(seed_news_likes_handle, length(news_likes_handles)),
+  to=news_likes_handles
+)
+## Make the second-level edges, one liker at a time
+news_edgelist_friends <- lapply(seq_along(news_likes_handles), function(i) {
+  cbind(from =rep(news_likes_handles[i],
+                  length(news_more_likes_handles[[i]])),
+        to=news_more_likes_handles[[i]])
+})
+# Join the first and second level edges into one edge list
+news_edgelist <- unique(rbind(news_edgelist_seed, do.call(rbind,news_edgelist_friends))) 
+# Remove self-likes, where an account would point to itself
+news_edgelist <- news_edgelist[news_edgelist[,"from"] != news_edgelist[,"to"], , drop = FALSE]
+
+# Show the number of rows and columns in the final edge list
+dim(news_edgelist)
+# Preview the first few follow relationships
+head(news_edgelist)
 
 #Build and plot the network
 
 library(igraph)
 # Graph just the seed user and the people who liked their skeet
-g_seed <- graph_from_edgelist(edgelist_seed, directed = T)
-
+g_seed_normal <- graph_from_edgelist(normal_edgelist_seed, directed = T)
+g_seed_news <- graph_from_edgelist(news_edgelist_seed, directed = T)
 # Graph the full two-level network from the complete edge list
-g <- graph_from_edgelist(edgelist,directed=T)
-
+g_normal <- graph_from_edgelist(normal_edgelist,directed=T)
+g_news <- graph_from_edgelist(news_edgelist,directed=T)
 # Graph the induced subgraph
-g2 <- induced_subgraph(g,V(g)[degree(g)>1])
+g2_normal <- induced_subgraph(g,V(g)[degree(g)>1])
+g2_news <- induced_subgraph(g,V(g)[degree(g)>1])
 
 # Plot the seed user and direct likes only
-par(mfrow=c(1,1))
-plot(g_seed, layout=layout_with_fr(g_seed), vertex.size=2, vertex.label.cex=0.25,
-     main = "Seed User and Direct Likes")
+par(mfrow=c(1,2))
+plot(g_seed_normal, layout=layout_with_fr(g_seed_normal), vertex.size=2, vertex.label.cex=0.25,
+     main = "Normal User and Direct Likes")
+plot(g_seed_news, layout=layout_with_fr(g_seed_news), vertex.size=2, vertex.label.cex=0.25,
+     main = "News User and Direct Likes")
 
 # Plot the full network
-plot(g, layout=layout_with_fr(g), vertex.size=5, vertex.label.cex=0.25,
-     main = "Full Likes Network")
+plot(g_normal, layout=layout_with_fr(g_normal), vertex.size=5, vertex.label.cex=0.25,
+     main = "Full Normal Likes Network")
+plot(g_news, layout=layout_with_fr(g_news), vertex.size=5, vertex.label.cex=0.25,
+     main = "Full News Likes Network")
 
 # Plot the subgraph of shared second-level likes with Kamada-Kawai positioning
-plot(g2, layout=layout_with_kk(g2), vertex.size=3, vertex.label.cex=0.25, 
-     main = "Subgraph of Shared Second-Level Likes")
+plot(g2_normal, layout=layout_with_kk(g2_normal), vertex.size=3, vertex.label.cex=0.25, 
+     main = "Subgraph of Normal Shared Second-Level Likes")
+plot(g2_news, layout=layout_with_kk(g2_news), vertex.size=3, vertex.label.cex=0.25, 
+     main = "Subgraph of News Shared Second-Level Likes")
 ```
 
 
 ```{r}
 #Analyse the network
-vcount(g)
-ecount(g)
-round(edge_density(g), 4)
+# For normal user
+vcount(g_normal)
+ecount(g_normal)
+round(edge_density(g_normal), 4)
+
+# For news user
+vcount(g_news)
+ecount(g_news)
+round(edge_density(g_news), 4)
 ```
 
-The edge density of the network is quite small. This tells us that while each node is connected by at least one edge, there is not much or any crossover between the users who have liked posts from different accounts. This is evident in the "clusters" of nodes along the outer edge of the "Full Likes Network".  
+The edge density of the normal network is quite small. This tells us that while each node is connected by at least one edge, there is not much or any crossover between the users who have liked posts from different accounts. This is evident in the "clusters" of nodes along the outer edge of the "Normal Full Likes Network".
+
+The edge density of the news network is also small but almost double that for the normal network. This shows that users who like the news post are more connected than users who liked the normal post. 
 
 ```{r, fig.align='center'}
   #plot the in-degree distribution for shape comparison
-plot(degree_distribution(g, mode = "in"), type="h",
+plot(degree_distribution(g_normal, mode = "in"), type="h",
                          xlab="In-Degree", ylab = "Proportion",
                          main = "Bluesky degree distribution")
-print(degree_distribution(g, mode = "in"))
+print(degree_distribution(g_normal, mode = "in"))
 ```
 
-This distribution shows us that approximately 87% of the nodes in the full work have an in-degree of 2. Even though the edge density of the full graph is low, we could see from the subgraph that users in the second level of likes had also likes each others' posts. 
+This distribution shows us that approximately 90% of the nodes in the normal full network have an in-degree of 2. Even though the edge density of the full graph is low, we could see from the subgraph that users in the second level of likes had also likes each others' posts. 
+
+```{r, fig.align='center'}
+  #plot the in-degree distribution for shape comparison
+plot(degree_distribution(g_news, mode = "in"), type="h",
+                         xlab="In-Degree", ylab = "Proportion",
+                         main = "Bluesky degree distribution")
+print(degree_distribution(g_news, mode = "in"))
+```
+
+Approximately 93% of the users in the news likes network have an in-degree of 2, which is higher than that for the normal network, but less users here have an in-degree of 3. 
 
 ```{r}  
 #highest degree scores are most central
-head(sort(degree(g), decreasing=T),10)
+head(sort(degree(g_normal), decreasing=T),10)
 ```
 
 From degree scores, the user `itismashagain.bsky.social` is the most central. 
 
 ```{r}
   #highest igraph closeness scores are most central
-round(head(sort(closeness(g,mode="all"),
+round(head(sort(closeness(g_normal,mode="all"),
                 decreasing=T), 10), 4)
 ```
 
@@ -752,16 +852,35 @@ Once again, `itismashagain.bsky.social` is the most central, this time using the
 
 ```{r}
   #highest betweenness scores are most central
-round(head(sort(betweenness(g,directed=T),
+round(head(sort(betweenness(g_normal,directed=T),
                 decreasing=T), 10), 4)
 ```
 
 Using betweenness centrality, the user `tandy400.bsky.social` is the most central. This user did appear in the previous top tens for centrality, but it is surprising that `itismashagain.bsky.social` does not appear in this top ten despite previously being central. 
 
+```{r}
+# For news user
+head(sort(degree(g_news), decreasing=T),10)
+```
+
+From degree scores, the user `npr.org` is the most central. 
+
+```{r}
+  #highest igraph closeness scores are most central
+round(head(sort(closeness(g_news,mode="all"),
+                decreasing=T), 10), 4)
+```
+
+Once again, `npr.org` is the most central, this time using the igraph closeness centrality. 
+
+
+```{r}
+  #highest betweenness scores are most central
+round(head(sort(betweenness(g_news,directed=T),
+                decreasing=T), 10), 4)
+```
+This time `pfalcon.bsky.social` is most central, and `npr.org` doesn't make the top ten more central. 
+
 # Conclusion
 
-# Tutorial notes
-- p-values (mention if it's a two-tail test or not)
-- use randomisation if there is a lack of data
-- copying code from tutorials is fair game, make sure you understand and explain it
-- could make a histogram randomising like counts maybe
+
