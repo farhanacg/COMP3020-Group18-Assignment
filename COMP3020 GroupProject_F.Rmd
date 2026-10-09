@@ -1,0 +1,706 @@
+---
+title: "COMP3020 Group Assignment"
+author: "Annelise Tough, Neville Georgiades, Farhana Akter"
+date: "2026-09-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+| Group Member         | Student ID | Contribution |
+| -------------------- | -----------| ------------ |
+| Farhana Akter        | 22213545   |
+| Neville Georgiades   | 22138296   |
+| Annelise Tough       | 22091226   |
+
+\newpage 
+
+# Introduction
+
+# Analysis
+
+## Data Collection | Farhana
+
+Choose a topic of interest and collect suitable data from an appropriate social web source using R.
+Document your data collection, including:
+• how the data was accessed and obtained;
+• relevant R packages;
+• variables collected and data volume; and
+• relevant limitations.
+Consider the limitations of your data source and collection process when interpreting your results.
+
+
+
+### Data source and collection
+
+For this project, we collected social media data from **Bluesky** about the FIFA World Cup 2026. Bluesky was selected because it provides public social media posts that can be used to study people's discussions and interactions around a topic.
+
+We used the `atrrr` package in R to collect the data. The `atrrr` package provides functions for accessing Bluesky data through the AT Protocol. The main function used for this project was `search_skeet()`.
+
+We searched for posts containing the phrase **"FIFA World Cup"** between **1 June 2026 and 31 July 2026**. The search was sorted by the latest posts, and we requested up to 1,000 posts.
+
+
+The main code used was:
+
+```{r, message = FALSE}
+library(atrrr)
+library("tm")
+library("SnowballC")
+library("wordcloud")
+
+worldcup <- search_skeet(
+  q = "FIFA World Cup",
+  sort = "latest",
+  since = "2026-06-01",
+  until = "2026-07-31",
+  limit = 1000L
+)
+
+```
+
+After collecting the data, we checked the number of records using:
+
+```{r}
+nrow(worldcup)
+```
+
+The result was 1,030 posts. Although the requested limit was 1,000, the function returned a small number of additional records. We kept all 1,030 collected posts for the analysis.
+
+We also checked the variables available in the dataset:
+
+```{r}
+names(worldcup)
+```
+
+The data contained information about the posts, users, engagement, dates and relationships between posts.
+
+### Variables collected
+
+Some of the main variables collected are shown below.
+
+| Variable         | Description                                 |
+| ---------------- | ------------------------------------------- |
+| `uri`            | Unique identifier for each post             |
+| `cid`            | Content identifier for the post             |
+| `author_handle`  | Bluesky account handle of the user          |
+| `author_name`    | Display name of the user                    |
+| `text`           | Text content of the post                    |
+| `reply_count`    | Number of replies to the post               |
+| `repost_count`   | Number of reposts                           |
+| `like_count`     | Number of likes                             |
+| `quote_count`    | Number of quote posts                       |
+| `bookmark_count` | Number of bookmarks                         |
+| `created_at`     | Date and time when the post was created     |
+| `indexed_at`     | Date and time when the post was indexed     |
+| `in_reply_to`    | Information about the post being replied to |
+| `in_reply_root`  | Root post of a reply conversation           |
+| `quotes`         | Information about quoted posts              |
+| `tags`           | Tags or hashtags associated with the post   |
+| `mentions`       | Accounts mentioned in the post              |
+| `links`          | Links included in the post                  |
+| `langs`          | Language information                        |
+| `labels`         | Available content labels                    |
+
+The text variable is particularly important for this project because it will be used for text analysis and clustering. The engagement variables, such as like_count, repost_count and reply_count, can also be used to examine how users interacted with the posts.
+
+
+### Data volume
+
+The final dataset contained 1,030 Bluesky posts collected during the selected period from 1 June 2026 to 31 July 2026.
+
+The dataset contains several list-type variables, including author_data, post_data, embed_data, tags, mentions, links, langs and labels. These variables contain structured information about posts and users. The original dataset was kept in R because some of this information may be useful for other parts of the project, particularly network analysis.
+
+### 504 timeout issue
+
+During the initial data collection, the request returned a **504 Gateway Timeout** error when the same search was attempted. This means that the request did not receive a response from the server within the expected time.
+
+The search was tried again later using the same `search_skeet()` method, and it worked successfully. Therefore, the 504 error was treated as a temporary connection or server response issue rather than a problem with the R code.
+
+### Limitations
+
+There are several limitations to this data collection. First, the data only comes from Bluesky, so it does not represent discussions from other social media platforms or the opinions of the general population.
+
+Second, we used the search phrase "FIFA World Cup". Posts discussing the World Cup using different words or terms may not have been included. Search results can also match information connected to a post, such as a link preview or image alt text, and not only the main post text.
+
+Another limitation is that engagement numbers can change over time. For example, a post may receive more likes, reposts or replies after the data was collected. Therefore, the engagement values represent the information available when the data was collected.
+
+Finally, the dataset is a sample of Bluesky posts rather than every post related to the FIFA World Cup. Therefore, the results should be understood as patterns within our collected dataset rather than a complete representation of public opinion about the FIFA World Cup.
+
+### Saving
+
+As the project is being completed on multiple devices, it is important to make sure the same data is being used. We used the below code to save the data, and then this file was shared with the other group members. 
+
+```{r}
+#save(worldcup, compress = FALSE, file = "/Users/annelisetough/Desktop/WSU/COMP3020/WorldCupSkeets.RData")
+# This has been commented out as the data has already been saved
+load("/Users/annelisetough/Desktop/WSU/COMP3020/WorldCupSkeets.RData")
+```
+
+\newpage
+
+## Hypothesis Testing | Neville
+
+Develop a research question that can be addressed using hypothesis testing. The research question may involve any suitable variables in the data collected from the social web, but should contribute to the overall investigation.
+Clearly state the hypotheses and select an appropriate statistical test from those covered in COMP3020.
+Explain why the test is suitable and interpret the result in the context of your research question.
+Hint: Consider whether characteristics of posts, users, films or other entities in your dataset can be compared or associated in a way that addresses an interesting question.
+
+$H_0$: Skeets from news sites and normal users have the same amount of average likes.
+$H_A$: Skeets from news sites and normal users have a different amount of average likes. 
+
+### Separate the data into news and normal users
+```{r}
+# First we get the locations of the skeets from news sites using the `grep` command
+# Some normal users may end up in the list, but this is difficult to avoid
+# This may also not catch all news sites if these key words are not in their Bluesky handles
+news_skeet_locations = c(grep("news", worldcup$author_handle),
+                         grep("org", worldcup$author_handle),
+                         grep("net", worldcup$author_handle),
+                         grep("com", worldcup$author_handle),
+                         grep("hub", worldcup$author_handle),
+                         grep("times", worldcup$author_handle))
+print(news_skeet_locations)
+length(news_skeet_locations)
+```
+
+There are approximately 199 skeets out of 1030 from news sites (approximate as some news sites may have been missed and some normal users may have been included in this search). 
+
+Now we can split our `worldcup` data into two, one for news skeets and one for normal skeets, and find the average like counts. 
+
+```{r}
+news_skeets = worldcup[news_skeet_locations,]
+normal_skeets = worldcup[-news_skeet_locations,]
+
+avg_news_likes = sum(news_skeets$like_count)/length(news_skeets)
+avg_normal_likes = sum(normal_skeets$like_count)/length(normal_skeets)
+cat("News:", avg_news_likes, "Normal:", avg_normal_likes, "\n")
+```
+
+
+## Text/Content Analysis and Visualisation | Neville 
+
+Clean the data and address missing or unsuitable records. Explore the textual/content characteristics of your data and represent the text in an appropriate form for further analysis. Provide relevant summaries and at least two informative visualisations, including a visualisation of frequent words.
+Interpret the patterns you identify and explain how they contribute to your investigation.
+
+\newpage
+
+## Clustering | Farhana and Annelise
+
+Investigate whether meaningful clusters can be identified in the textual/content data.
+Make appropriate decisions about the representation of the data, distance measure and number of clusters, and justify these decisions. Visualise your clusters and summarise the themes or characteristics of each cluster.
+Your clustering analysis should go beyond simply running an R function and reporting the cluster labels.
+
+### K-Means Clustering
+- Lab 6
+- uses Euclidean distance
+
+```{r, message = FALSE, warning = FALSE}
+worldcup_texts = worldcup$text
+
+worldcup.corpus=Corpus(VectorSource(worldcup_texts))
+worldcup.corpus = tm_map(
+  worldcup.corpus,
+  function(x) iconv(x, to = "ASCII")
+)
+# remove_urls = content_transformer(function(x) {
+#    gsub("https?://\\S+|www\\.\\S+", " ", x, perl = TRUE)
+#    })
+#remove_urls <- function(x) gsub(c("http[^[:space:]]*", "www[^[:space:]]*"), "", x) 
+worldcup.corpus = tm_map(worldcup.corpus, remove_urls)
+remove_urls = content_transformer(function(x) {
+  gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
+})
+custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
+               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
+               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
+               "wwwbbccouksportfootba", "fecking")
+
+worldcup.corpus=tm_map(worldcup.corpus, removeNumbers)
+worldcup.corpus=tm_map(worldcup.corpus, removePunctuation)
+worldcup.corpus=tm_map(worldcup.corpus, stripWhitespace)
+worldcup.corpus=tm_map(worldcup.corpus, tolower)
+worldcup.corpus=tm_map(worldcup.corpus, removeWords,
+                    c(stopwords("english"), custom_words, tolower(custom_words)))
+worldcup.corpus=tm_map(worldcup.corpus, stemDocument)
+worldcup.corpus=tm_map(worldcup.corpus, removeWords,
+                    c(stopwords("english"), custom_words, tolower(custom_words)))
+
+# Extract document vectors and apply TF-IDF weighting
+## Create a term-document matrix
+worldcup.tdm=TermDocumentMatrix(worldcup.corpus)
+# Apply TF-IDF weighting.
+worldcup.wtdm = weightTfIdf(worldcup.tdm)
+# Transpose so documents are rows and terms are columns.
+worldcup.matrix = t(as.matrix(worldcup.wtdm))
+# Remove empty texts
+empties = which(rowSums(abs(worldcup.matrix)) == 0)
+worldcup.matrix = worldcup.matrix[-empties, ]
+```
+
+When using K-means clustering, we need to decide the appropriate amount of clusters. We can observe the within sum of squares (SSW) and choose the number of clusters based on which K value has the lowest SSW. 
+
+We start by observing the SSWs for clusters of size 1 to 15. 
+
+```{r}
+worldcup_SSW <- list()
+for(i in 1:15){
+  K = kmeans(worldcup.matrix, i)
+  worldcup_SSW[i] <- K$tot.withinss
+}
+plot(1:15, worldcup_SSW, type = "b", xlab = "Number of Clusters")
+```
+
+In this plot we can see an "elbow" at 8 clusters. 
+
+```{r, warning = FALSE}
+# K-Means clustering with cosine distance
+norm.worldcup.matrix=diag(
+  1/sqrt(rowSums(worldcup.matrix^2))
+) %*% worldcup.matrix
+
+# create manual cosine distance
+D = dist(norm.worldcup.matrix, method="euclidean")^2/2
+
+N = dim(worldcup.matrix)[1]
+N
+dim(as.matrix(D))
+
+mds.worldcup.matrix=cmdscale(D, k=80)
+
+SSW.mds = rep(0,15)
+for(i in 1:15){
+  K=kmeans(mds.worldcup.matrix, i, nstart = 20)
+  SSW.mds[i] = K$tot.withinss
+}
+plot(1:15, SSW.mds, type = "b")
+# elbows at 7
+
+K=kmeans(mds.worldcup.matrix, 7, nstart=20)
+mds2.worldcup.matrix=cmdscale(D,k=2)
+plot(mds2.worldcup.matrix, col = K$cluster)
+
+
+# Examining the cluster contents
+K = kmeans(mds.worldcup.matrix, 7, nstart=20)
+table(K$cluster)
+
+# # Find top terms for the first cluster
+# cluster.number = 1
+# #find posts assigned to this cluster
+# clusterpostsId=which(K$cluster == cluster.number)
+# #extract their original weighted document vectors
+# clusterposts = worldcup.matrix[clusterpostsId,]
+# #calculate the mean TF-IDF weight of each term
+# clusterTermWeight=colMeans(clusterposts)
+# #display the top 10 weighted terms
+# sort(clusterTermWeight, decreasing = TRUE)[1:10]
+# #make wordcloud
+# wordcloud(
+#   words = names(clusterTermWeight),
+#   freq = clusterTermWeight,
+#   min.freq = 3,
+#   max.words = 100,
+#   random.order = FALSE,
+#   rot.per = 0.35,
+#   colors = brewer.pal(8, "Dark2"),
+#   scale = c(2, .5)
+# )
+
+par(mfrow = c(1,1))
+for(i in 1:7){
+  cluster.number = i
+  clusterpostsId=which(K$cluster == cluster.number)
+  clusterposts = worldcup.matrix[clusterpostsId,]
+  clusterTermWeight=colMeans(clusterposts)
+  sort(clusterTermWeight, decreasing = TRUE)[1:10]
+  wordcloud(
+    words = names(clusterTermWeight),
+    freq = clusterTermWeight,
+    min.freq = 3,
+    max.words = 100,
+    random.order = FALSE,
+    rot.per = 0.35,
+    colors = brewer.pal(8, "Dark2"),
+    scale = c(2, .5),
+  )
+}
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+news_texts = news_skeets$text
+
+news.corpus=Corpus(VectorSource(news_texts))
+news.corpus = tm_map(
+  news.corpus,
+  function(x) iconv(x, to = "ASCII")
+)
+# remove_urls = content_transformer(function(x) {
+#    gsub("https?://\\S+|www\\.\\S+", " ", x, perl = TRUE)
+#    })
+remove_urls = content_transformer(function(x) {
+  gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
+})
+#remove_urls <- function(x) gsub(c("http[^[:space:]]*", "www[^[:space:]]*"), "", x) 
+news.corpus = tm_map(news.corpus, remove_urls)
+
+custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
+               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
+               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
+               "wwwbbccouksportfootba", "fecking")
+
+news.corpus=tm_map(news.corpus, removeNumbers)
+news.corpus=tm_map(news.corpus, removePunctuation)
+news.corpus=tm_map(news.corpus, stripWhitespace)
+news.corpus=tm_map(news.corpus, tolower)
+news.corpus=tm_map(news.corpus, removeWords,
+                    c(stopwords("english"), custom_words, tolower(custom_words)))
+news.corpus=tm_map(news.corpus, stemDocument)
+# I tried repeating this command after stemming as some of my custom stop words kept sneaking through
+news.corpus=tm_map(news.corpus, removeWords,
+                    c(stopwords("english"), custom_words, tolower(custom_words)))
+
+# Extract document vectors and apply TF-IDF weighting
+## Create a term-document matrix
+news.tdm=TermDocumentMatrix(news.corpus)
+# Apply TF-IDF weighting.
+news.wtdm = weightTfIdf(news.tdm)
+# Transpose so documents are rows and terms are columns.
+news.matrix = t(as.matrix(news.wtdm))
+# Remove empty texts
+empties = which(rowSums(abs(news.matrix)) == 0)
+news.matrix = news.matrix[-empties, ]
+
+news_SSW <- list()
+for(i in 1:15){
+  K = kmeans(news.matrix, i)
+  news_SSW[i] <- K$tot.withinss
+}
+plot(1:15, news_SSW, type = "b", xlab = "Number of Clusters")
+# Looks like 5 or 6 clusters is good
+
+# K-Means clustering with cosine distance
+norm.news.matrix=diag(
+  1/sqrt(rowSums(news.matrix^2))
+) %*% news.matrix
+
+# create manual cosine distance
+D = dist(norm.news.matrix, method="euclidean")^2/2
+
+N = dim(news.matrix)[1]
+N
+dim(as.matrix(D))
+
+mds.news.matrix=cmdscale(D, k=87)
+
+SSW.mds = rep(0,15)
+for(i in 1:15){
+  K=kmeans(mds.news.matrix, i, nstart = 20)
+  SSW.mds[i] = K$tot.withinss
+}
+plot(1:15, SSW.mds, type = "b")
+# hard to tell where the elbow is
+
+K=kmeans(mds.news.matrix, 5, nstart=20)
+mds2.news.matrix=cmdscale(D,k=2)
+plot(mds2.news.matrix, col = K$cluster)
+
+
+# Examining the cluster contents
+K = kmeans(mds.news.matrix, 5, nstart=20)
+table(K$cluster)
+
+# Find top terms for the first cluster
+cluster.number = 4
+#find posts assigned to this cluster
+clusterpostsId=which(K$cluster == cluster.number)
+#extract their original weighted document vectors
+clusterposts = worldcup.matrix[clusterpostsId,]
+#calculate the mean TF-IDF weight of each term
+clusterTermWeight=colMeans(clusterposts)
+#display the top 10 weighted terms
+sort(clusterTermWeight, decreasing = TRUE)[1:40]
+```
+
+At this stage I encountered some words in the cluster that I wanted to exclude (mainly websites that survived the `remove_urls` command), so I added these terms to my stop words and repeated the above code until I was satisfied that all irrelevant terms were removed. 
+
+```{r, message = FALSE, warning = FALSE}
+#make wordcloud
+wordcloud(
+  words = names(clusterTermWeight),
+  freq = clusterTermWeight,
+  min.freq = 3,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0.35,
+  colors = brewer.pal(8, "Dark2"),
+  scale = c(2, .5)
+)
+```
+
+### Hierarchical Clustering
+
+```{r}
+# First we set up and clean the normal skeets data
+normal_texts = normal_skeets$text
+normal.corpus=Corpus(VectorSource(normal_texts))
+normal.corpus = tm_map(
+  normal.corpus,
+  function(x) iconv(x, to = "ASCII")
+)
+
+remove_urls = content_transformer(function(x) {
+  gsub("(f|ht)tp\\S+\\s*|www\\.\\S+\\s*", "", x, perl = TRUE)
+})
+normal.corpus = tm_map(normal.corpus, remove_urls)
+
+custom_words=c("World", "Cup", "FIFA", "news", "com", "youtube", "fuck", "yahoo", 
+               "media", "article", "fucking", "wwwtiktokcomtzptxsc", "wwwtheguardiancomfootbal",
+               "wwwgenocidewatchcomsinglepost", "youtubecomshortsvvk", "feck",
+               "wwwbbccouksportfootba", "fecking")
+
+normal.corpus=tm_map(normal.corpus, removeNumbers)
+normal.corpus=tm_map(normal.corpus, removePunctuation)
+normal.corpus=tm_map(normal.corpus, stripWhitespace)
+normal.corpus=tm_map(normal.corpus, tolower)
+normal.corpus=tm_map(normal.corpus, removeWords,
+                    c(stopwords("english"), custom_words, tolower(custom_words)))
+normal.corpus=tm_map(normal.corpus, stemDocument)
+# I tried repeating this command after stemming as some of my custom stop words kept sneaking through
+normal.corpus=tm_map(normal.corpus, removeWords,
+                    c(stopwords("english"), custom_words, tolower(custom_words)))
+
+# Extract document vectors and apply TF-IDF weighting
+## Create a term-document matrix
+normal.tdm=TermDocumentMatrix(normal.corpus)
+# Apply TF-IDF weighting.
+normal.wtdm = weightTfIdf(normal.tdm)
+# Transpose so documents are rows and terms are columns.
+normal.matrix = t(as.matrix(normal.wtdm))
+# Remove empty texts
+empties = which(rowSums(abs(normal.matrix)) == 0)
+normal.matrix = normal.matrix[-empties, ]
+
+
+index = c(rep("News", length(news_texts)),
+          rep("Normal", length(normal_texts)))
+
+# Need to repeat the below code so we can locate the empty worldcup matrix locations
+worldcup.matrix = t(as.matrix(worldcup.wtdm))
+empties = which(rowSums(abs(worldcup.matrix))==0)
+index = index[-empties]
+worldcup.matrix = worldcup.matrix[-empties,]
+
+id.News = which(index == "News")[1:10]
+id.Normal = which(index == "Normal")[1:10]
+
+new.posts.matrix = worldcup.matrix[c(id.News, id.Normal),]
+
+norm.posts.matrix = diag(
+  1/sqrt(rowSums(new.posts.matrix^2))
+) %*% new.posts.matrix
+rownames(norm.posts.matrix) = rownames(new.posts.matrix)
+
+#cosine distance
+D = dist(norm.posts.matrix, method = "euclidean")^2/2
+
+#apply and plot single-linkage hierarchical clustering
+h = hclust(D, method = "single")
+plot(h)
+
+#with complete-linkage
+h = hclust(D, method="complete")
+plot(h)
+
+# in both, posts 6 and 125 are joined first
+# complete-linkage yields clearer groupings
+
+# Optional | Adding Colour
+
+library(dendextend)
+#Create group colours, convert the result to a dendrogram and reorder the colours to match its leaves:
+  # Black: Labor; red: Liberal; green: Greens.
+colors_to_use = as.numeric(c(
+    rep(1, 10),
+    rep(2, 10)
+  ))
+dend = as.dendrogram(h)
+colors_to_use = colors_to_use[order.dendrogram(dend)]
+labels_colors(dend) = colors_to_use
+#Plot the coloured dendrogram and add a legend:
+plot(dend, main = "A Colour for Each Post Group")
+legend(
+  "topright",
+  legend = c("Labor", "Liberal", "Greens"),
+  col = c(1, 2, 3),
+  pch = 20,
+  ncol = 3,
+  cex = 0.5
+)  
+```
+\newpage
+
+## Network Analysis | Annelise
+
+Construct a network from meaningful relationships in the data, such as follows, replies, mentions, reposts, film–actor links, film–director links or actor co-appearances. The relationships represented by the edges must come from the data; arbitrary relationships created simply to satisfy the network requirement are not acceptable. Aim to construct a sufficiently large and well-connected network that allows meaningful analysis.
+• Define nodes and edges, explain what edges represent and justify whether the graph is directed or
+undirected.
+• Report node and edge counts and relevant properties such as density, components or degree distribution.
+• Visualise the full network and a justified subgraph of the network. Use layout, colour, labels and size
+effectively.
+• Calculate and interpret at least two centrality measures; identify and discuss important nodes.
+• Explain how data collection, API limitations, and any filtering or network construction decisions may
+affect your findings.
+
+### Constructing A Bluesky Network
+
+We chose to construct a Bluesky network based on skeet likes. Our seed user is the user whose post has the highest like count out of all the skeets in our database. From there, we will identify a portion of the people who liked that skeet, then extract some of their own skeets and find people who have liked those. 
+
+```{r, fig.align = 'center', fig.dim=c(8,6), out.width = "100%", message = FALSE}
+library(dplyr)
+# Create new worldcup data frame that is ordered from most likes to least likes
+worldcup_likes_order = worldcup[order(worldcup$like_count, decreasing = TRUE),]
+
+# Create author info data frame where users are in order of likes
+author_info_likes <- get_user_info(unique(worldcup_likes_order$author_handle))
+
+# Display the five authors with the most likes
+top_candidates <- head(author_info_likes[, c("actor_handle", "actor_name", "follows_count")], 5)
+top_candidates
+
+# Our seed user will be the first row of our author_info_likes data frame
+seed_user_likes_handle <- author_info_likes$actor_handle[1]
+seed_user_likes_handle
+
+# Find the seed users' skeet (post) (first entry in reordered worldcup posts)
+seed_user_likes_post <- worldcup_likes_order[1,]
+
+# Now we can see who liked this post. We limit the search to 20 users for the sake of interpretation.
+likes_handles <- get_likes(seed_user_likes_post$uri, limit = 20)$actor_handle
+head(likes_handles)
+
+# Collect a selection of skeets from each of the likes_handles feeds
+feeds <- list()
+for(i in 1:length(likes_handles)){
+  feeds[[i]] <- data.frame(get_skeets_authored_by(likes_handles[i], limit = 2))
+}
+# Transform the list into a dataframe
+likes_feeds_df <- do.call(rbind, feeds)
+## Note that not all of the skeets a user has posted are originally theirs, some are reposts.
+dim(likes_feeds_df)[1]
+length(likes_feeds_df)
+# Find who has liked posts from the likes_handles. 
+more_likes <- list()
+for(i in 1:dim(likes_feeds_df)[1]){
+  more_likes[[i]] <- get_likes(likes_feeds_df[i,]$uri, limit = 10)
+}
+more_likes_handles <- lapply(more_likes, '[[', "actor_handle")
+sapply(more_likes_handles, length)
+
+# Create directed edge list
+## Make one row for each edge from the seed user to a liker
+edgelist_seed <- cbind(
+  from=rep(seed_user_likes_handle, length(likes_handles)),
+  to=likes_handles
+)
+
+## Make the second-level edges, one liker at a time
+edgelist_friends <- lapply(seq_along(likes_handles), function(i) {
+  cbind(from =rep(likes_handles[i],
+                  length(more_likes_handles[[i]])),
+        to=more_likes_handles[[i]])
+})
+
+# Join the first and second level edges into one edge list
+edgelist <- unique(rbind(edgelist_seed, do.call(rbind,edgelist_friends))) 
+# Remove self-likes, where an account would point to itself
+edgelist <- edgelist[edgelist[,"from"] != edgelist[,"to"], , drop = FALSE]
+# Remove rows where columns are NA
+#edgelist_clean <- edgelist[!apply(is.na(edgelist) | edgelist == "", 1, all), ]
+
+# Show the number of rows and columns in the final edge list
+dim(edgelist)
+# Preview the first few follow relationships
+head(edgelist)
+
+#Build and plot the network
+
+library(igraph)
+# Graph just the seed user and the people who liked their skeet
+g_seed <- graph_from_edgelist(edgelist_seed, directed = T)
+
+# Graph the full two-level network from the complete edge list
+g <- graph_from_edgelist(edgelist,directed=T)
+
+# Graph the induced subgraph
+g2 <- induced_subgraph(g,V(g)[degree(g)>1])
+
+# Plot the seed user and direct likes only
+par(mfrow=c(1,1))
+plot(g_seed, layout=layout_with_fr(g_seed), vertex.size=2, vertex.label.cex=0.25,
+     main = "Seed User and Direct Likes")
+
+# Plot the full network
+plot(g, layout=layout_with_fr(g), vertex.size=5, vertex.label.cex=0.25,
+     main = "Full Likes Network")
+
+# Plot the subgraph of shared second-level likes with Kamada-Kawai positioning
+plot(g2, layout=layout_with_kk(g2), vertex.size=3, vertex.label.cex=0.25, 
+     main = "Subgraph of Shared Second-Level Likes")
+```
+
+
+```{r}
+#Analyse the network
+vcount(g)
+ecount(g)
+round(edge_density(g), 4)
+```
+
+The edge density of the network is quite small. This tells us that while each node is connected by at least one edge, there is not much or any crossover between the users who have liked posts from different accounts. This is evident in the "clusters" of nodes along the outer edge of the "Full Likes Network".  
+
+```{r, fig.align='center'}
+  #plot the in-degree distribution for shape comparison
+plot(degree_distribution(g, mode = "in"), type="h",
+                         xlab="In-Degree", ylab = "Proportion",
+                         main = "Bluesky degree distribution")
+print(degree_distribution(g, mode = "in"))
+```
+
+This distribution shows us that approximately 87% of the nodes in the full work have an in-degree of 2.
+
+```{r}  
+#highest degree scores are most central
+head(sort(degree(g), decreasing=T),10)
+```
+
+From degree scores, the user `itismashagain.bsky.social` is the most central. 
+
+```{r}
+  #highest igraph closeness scores are most central
+round(head(sort(closeness(g,mode="all"),
+                decreasing=T), 10), 4)
+```
+
+Once again, `itismashagain.bsky.social` is the most central, this time using the igraph closeness centrality. 
+
+
+```{r}
+  #highest betweenness scores are most central
+round(head(sort(betweenness(g,directed=T),
+                decreasing=T), 10), 4)
+```
+
+Using betweenness centrality, the user `tandy400.bsky.social` is the most central. This user did appear in the previous top tens for centrality, but it is surprising that `itismashagain.bsky.social` does not appear in this top ten despite previously being central. 
+
+# Conclusion
+
+# Tutorial notes
+- p-values (mention if it's a two-tail test or not)
+- use randomisation if there is a lack of data
+- copying code from tutorials is fair game, make sure you understand and explain it
+- could make a histogram randomising like counts maybe
