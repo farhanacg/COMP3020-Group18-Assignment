@@ -13,9 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 | Group Member         | Student ID | Contribution |
 | -------------------- | -----------| ------------ |
-| Farhana Akter        | 22213545   | 33%          |
-| Neville Georgiades   | 22138296   | 33%          |
-| Annelise Tough       | 22091226   | 34%          |
+| Farhana Akter        | 22213545   | 30%          |
+| Neville Georgiades   | 22138296   | 35%          |
+| Annelise Tough       | 22091226   | 35%          |
 
 
 Repository link: https://github.com/farhanacg/COMP3020-Group18-Assignment
